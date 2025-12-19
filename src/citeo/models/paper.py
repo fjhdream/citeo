@@ -19,10 +19,10 @@ class PaperSummary(BaseModel):
         description="Key points in Chinese (3-5 items)",
     )
     relevance_score: float = Field(
-        default=0.0,
-        ge=0.0,
-        le=1.0,
-        description="Relevance score for sorting (0-1)",
+        default=1.0,
+        ge=1.0,
+        le=10.0,
+        description="Programmer recommendation score for sorting (1-10)",
     )
     generated_at: datetime = Field(default_factory=datetime.utcnow)
 

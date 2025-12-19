@@ -110,6 +110,12 @@ class Settings(BaseSettings):
         ge=1,
         description="Maximum concurrent AI processing tasks (to avoid rate limits)",
     )
+    min_notification_score: float = Field(
+        default=8.0,
+        ge=1.0,
+        le=10.0,
+        description="Minimum programmer recommendation score for notification (1-10)",
+    )
 
     # Feed URLs (simple config, can also use database for complex scenarios)
     feed_urls: List[str] = Field(

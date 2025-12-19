@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS papers (
     title_zh TEXT,                      -- Chinese translated title
     abstract_zh TEXT,                   -- Chinese translated abstract
     key_points TEXT,                    -- JSON array of key points
-    relevance_score REAL DEFAULT 0.0,
+    relevance_score REAL DEFAULT 1.0,   -- Programmer recommendation score (1-10)
     ai_processed_at TIMESTAMP,
 
     -- PDF deep analysis

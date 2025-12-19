@@ -70,6 +70,7 @@ async def main(fetch_only: bool = False):
         notifier=notifier,
         enable_translation=settings.enable_translation,
         max_concurrent_ai=settings.ai_max_concurrent,
+        min_notification_score=settings.min_notification_score,
     )
 
     # Run pipeline

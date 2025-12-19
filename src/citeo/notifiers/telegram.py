@@ -169,9 +169,10 @@ class TelegramNotifier:
                 parts.append(f"• {self._escape_html(point)}")
 
         # Relevance score (if available)
-        if summary and summary.relevance_score > 0:
+        # Reason: Display 1-10 programmer recommendation score
+        if summary and summary.relevance_score >= 1:
             score_emoji = self._get_score_emoji(summary.relevance_score)
-            parts.append(f"\n{score_emoji} 相关性: {summary.relevance_score:.1%}")
+            parts.append(f"\n{score_emoji} 推荐度: {summary.relevance_score:.1f}/10")
 
         # Links
         parts.append("")
@@ -186,15 +187,20 @@ class TelegramNotifier:
         return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
     def _get_score_emoji(self, score: float) -> str:
-        """Get emoji based on relevance score."""
-        if score >= 0.8:
-            return "🔥"
-        elif score >= 0.6:
-            return "⭐"
-        elif score >= 0.4:
-            return "📊"
+        """Get emoji based on programmer recommendation score (1-10).
+
+        Reason: Visual indication of paper's value to programmers.
+        """
+        if score >= 9:
+            return "🔥🔥"  # 9-10: Must-read for programmers
+        elif score >= 8:
+            return "🔥"    # 8: Highly recommended
+        elif score >= 6:
+            return "⭐"    # 6-7: Worth reading
+        elif score >= 4:
+            return "📊"    # 4-5: Moderate interest
         else:
-            return "📄"
+            return "📄"    # 1-3: Low relevance
 
     async def send_deep_analysis(self, paper: Paper) -> bool:
         """Send PDF deep analysis notification for a paper.

@@ -189,16 +189,19 @@ class FeishuNotifier:
             key_points_text = "\n".join(f"• {p}" for p in summary.key_points[:4])
 
         # Score emoji
+        # Reason: Display 1-10 programmer recommendation score
         score_text = ""
-        if summary and summary.relevance_score > 0:
+        if summary and summary.relevance_score >= 1:
             score = summary.relevance_score
-            if score >= 0.8:
+            if score >= 9:
+                emoji = "🔥🔥"
+            elif score >= 8:
                 emoji = "🔥"
-            elif score >= 0.6:
+            elif score >= 6:
                 emoji = "⭐"
             else:
                 emoji = "📊"
-            score_text = f"{emoji} 相关性: {score:.0%}"
+            score_text = f"{emoji} 推荐度: {score:.1f}/10"
 
         # Categories
         categories = " ".join(f"`{cat}`" for cat in paper.categories[:3])

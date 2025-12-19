@@ -34,6 +34,7 @@ class PaperService:
         notifier: TelegramNotifier,
         enable_translation: bool = True,
         max_concurrent_ai: int = 5,
+        min_notification_score: float = 8.0,
     ):
         """Initialize paper service.
 
@@ -44,6 +45,7 @@ class PaperService:
             notifier: Notification sender instance.
             enable_translation: Whether to enable AI translation.
             max_concurrent_ai: Maximum concurrent AI processing tasks.
+            min_notification_score: Minimum score for notification (1-10).
         """
         self._sources = sources
         self._parser = parser
@@ -51,6 +53,7 @@ class PaperService:
         self._notifier = notifier
         self._enable_translation = enable_translation
         self._max_concurrent_ai = max_concurrent_ai
+        self._min_notification_score = min_notification_score
 
     async def run_daily_pipeline(self) -> dict:
         """Execute the daily processing pipeline.
@@ -174,10 +177,50 @@ class PaperService:
         return list(processed)
 
     async def _notify(self, papers: List[Paper]) -> int:
-        """Send notifications for papers."""
-        success_count = await self._notifier.send_papers(papers)
+        """Send notifications for papers with score >= threshold.
 
-        # Mark successful ones as notified
+        Reason: Filter papers by recommendation score to only notify about
+        highly relevant papers for programmers (score >= threshold). Sort by score
+        in descending order to show most important papers first.
+        """
+        # Filter papers with score >= threshold (only those with AI summary)
+        # Reason: Only recommend papers that are highly relevant to programmers
+        high_score_papers = [
+            p for p in papers
+            if p.summary and p.summary.relevance_score >= self._min_notification_score
+        ]
+
+        # Sort by relevance score (descending)
+        # Reason: Show most important papers first
+        high_score_papers.sort(
+            key=lambda p: p.summary.relevance_score if p.summary else 0,
+            reverse=True
+        )
+
+        log = logger.bind(
+            total_papers=len(papers),
+            high_score_papers=len(high_score_papers),
+            min_score=self._min_notification_score
+        )
+        log.info(
+            "Filtering papers for notification",
+            filtered_count=len(high_score_papers)
+        )
+
+        if not high_score_papers:
+            log.info(
+                f"No papers with score >= {self._min_notification_score}, skipping notifications"
+            )
+            # Still mark all as notified even if not sent
+            # Reason: Avoid reprocessing low-score papers in future runs
+            for paper in papers:
+                await self._storage.mark_as_notified(paper.guid)
+            return 0
+
+        success_count = await self._notifier.send_papers(high_score_papers)
+
+        # Mark all papers as notified (both sent and filtered)
+        # Reason: Avoid reprocessing low-score papers in future runs
         for paper in papers:
             await self._storage.mark_as_notified(paper.guid)
 

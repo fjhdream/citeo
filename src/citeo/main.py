@@ -82,6 +82,7 @@ async def lifespan(app: FastAPI):
         notifier=notifier,
         enable_translation=settings.enable_translation,
         max_concurrent_ai=settings.ai_max_concurrent,
+        min_notification_score=settings.min_notification_score,
     )
 
     # Create and start scheduler
@@ -144,6 +145,7 @@ async def run_cli_once():
         notifier=notifier,
         enable_translation=settings.enable_translation,
         max_concurrent_ai=settings.ai_max_concurrent,
+        min_notification_score=settings.min_notification_score,
     )
 
     # Run pipeline
