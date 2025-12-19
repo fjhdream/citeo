@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  citeo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: citeo-app
+    restart: unless-stopped
+
+    # Environment variables - copy from .env.example and customize
+    env_file:
+      - .env
+
+    # Alternatively, specify environment variables directly:
+    # environment:
+    #   OPENAI_API_KEY: ${OPENAI_API_KEY}
+    #   TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+    #   TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+    #   NOTIFIER_TYPES: '["telegram"]'
+    #   DB_TYPE: sqlite
+    #   DB_PATH: data/citeo.db
+    #   API_HOST: 0.0.0.0
+    #   API_PORT: 8000
+    #   DAILY_FETCH_HOUR: 8
+    #   DAILY_FETCH_MINUTE: 0
+    #   LOG_LEVEL: INFO
+    #   DEBUG: false
+
+    ports:
+      # Reason: Expose API server for external access and health checks
+      - "8000:8000"
+
+    volumes:
+      # Reason: Persist SQLite database across container restarts
+      - ./data:/app/data
+      # Optional: Mount logs directory
+      # - ./logs:/app/logs
+
+    # Resource limits (optional but recommended)
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Network (optional, if you want to connect to other services)
+    # networks:
+    #   - citeo-network
+
+# Optional: Define custom network
+# networks:
+#   citeo-network:
+#     driver: bridge
+
+# Persistent volumes (alternative to bind mounts)
+# volumes:
+#   citeo-data:

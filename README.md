@@ -14,14 +14,42 @@ arXiv RSS订阅 + AI摘要翻译 + 多渠道推送系统
 
 ## 快速开始
 
-### 1. 安装依赖
+### 方式一：Docker Compose 部署（推荐）
+
+```bash
+# 1. 克隆项目
+git clone https://github.com/yourusername/citeo.git
+cd citeo
+
+# 2. 配置环境变量
+cp .env.example .env
+# 编辑 .env 填入必要配置：
+# - OPENAI_API_KEY（必填）
+# - TELEGRAM_BOT_TOKEN 和 TELEGRAM_CHAT_ID（如使用Telegram）
+# - FEISHU_WEBHOOK_URL（如使用飞书）
+
+# 3. 启动服务
+docker-compose up -d
+
+# 4. 查看日志
+docker-compose logs -f citeo
+
+# 5. 停止服务
+docker-compose down
+```
+
+访问 `http://localhost:8000/api/health` 检查服务状态。
+
+### 方式二：本地开发
+
+#### 1. 安装依赖
 
 ```bash
 # 使用uv安装（推荐）
 uv sync
 ```
 
-### 2. 配置环境变量
+#### 2. 配置环境变量
 
 ```bash
 cp .env.example .env
@@ -31,7 +59,7 @@ cp .env.example .env
 # - FEISHU_WEBHOOK_URL（如使用飞书）
 ```
 
-### 3. 运行
+#### 3. 运行
 
 ```bash
 # 启动API服务器（带定时任务调度器）
@@ -150,6 +178,93 @@ RSS订阅源 → 解析器 → 存储去重 → AI翻译（并行） → 多渠�
 - AI处理采用并行化设计，默认最多5个并发任务
 - 如有10篇论文需处理（每篇3秒），从串行30秒优化到并行6秒
 - 通过`AI_MAX_CONCURRENT`可调节并发数，平衡速度与API限额
+
+## Docker 部署
+
+### 构建镜像
+
+```bash
+# 构建Docker镜像
+docker-compose build
+
+# 或使用Docker直接构建
+docker build -t citeo:latest .
+```
+
+### 配置说明
+
+Docker部署通过 `.env` 文件管理配置。容器会：
+
+- 自动创建并持久化 `data/` 目录（SQLite数据库）
+- 在容器内以非root用户运行（安全性）
+- 暴露8000端口供API访问
+- 包含健康检查确保服务正常运行
+
+### 常用命令
+
+```bash
+# 启动服务（后台运行）
+docker-compose up -d
+
+# 查看实时日志
+docker-compose logs -f
+
+# 重启服务
+docker-compose restart
+
+# 停止并删除容器
+docker-compose down
+
+# 停止并删除容器及数据卷
+docker-compose down -v
+
+# 进入容器Shell
+docker-compose exec citeo bash
+
+# 手动触发一次任务
+docker-compose exec citeo python -m citeo.main --run-once
+
+# 查看容器状态
+docker-compose ps
+```
+
+### 资源限制
+
+默认配置中设置了资源限制：
+- CPU: 0.5-2核
+- 内存: 512M-2G
+
+可在 `docker-compose.yml` 中根据需求调整。
+
+### 环境变量管理
+
+Docker部署支持两种方式配置环境变量：
+
+1. **使用 .env 文件（推荐）**
+   ```bash
+   cp .env.example .env
+   # 编辑 .env
+   docker-compose up -d
+   ```
+
+2. **直接在 docker-compose.yml 中指定**
+   ```yaml
+   environment:
+     OPENAI_API_KEY: your-key-here
+     TELEGRAM_BOT_TOKEN: your-token
+   ```
+
+### 健康检查
+
+容器包含健康检查机制，每30秒检查API服务是否正常响应：
+
+```bash
+# 查看健康状态
+docker-compose ps
+
+# 手动测试健康检查
+curl http://localhost:8000/api/health
+```
 
 ## 开发
 

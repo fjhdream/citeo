@@ -1,0 +1,60 @@
+# Reason: Multi-stage build to minimize final image size
+# Stage 1: Build stage with uv for dependency installation
+FROM python:3.11-slim AS builder
+
+# Install uv package manager
+# Reason: uv is significantly faster than pip and handles dependency resolution better
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+# Set working directory
+WORKDIR /app
+
+# Copy dependency files first for better layer caching
+# Reason: Dependencies change less frequently than source code
+COPY pyproject.toml uv.lock ./
+
+# Install dependencies in system Python
+# Reason: --system flag installs directly without virtual environment in container
+RUN uv sync --frozen --no-dev --system
+
+# Stage 2: Runtime stage with minimal footprint
+FROM python:3.11-slim
+
+# Install runtime dependencies for PDF processing
+# Reason: pymupdf requires additional system libraries
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    libmupdf-dev \
+    mupdf-tools \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app user for security
+# Reason: Never run containers as root
+RUN useradd -m -u 1000 citeo && \
+    mkdir -p /app/data && \
+    chown -R citeo:citeo /app
+
+WORKDIR /app
+
+# Copy Python packages from builder
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Copy application source code
+COPY --chown=citeo:citeo src/ ./src/
+COPY --chown=citeo:citeo scripts/ ./scripts/
+COPY --chown=citeo:citeo pyproject.toml ./
+
+# Switch to non-root user
+USER citeo
+
+# Expose API port
+EXPOSE 8000
+
+# Health check
+# Reason: Allow container orchestration to verify service health
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD python -c "import httpx; httpx.get('http://localhost:8000/health', timeout=5)" || exit 1
+
+# Default command: start API server with scheduler
+CMD ["python", "-m", "citeo.main"]
