@@ -5,9 +5,13 @@ Provides REST API endpoints for PDF analysis and paper queries.
 
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
+from citeo.auth.dependencies import require_auth
+from citeo.auth.exceptions import RateLimitExceededError
+from citeo.auth.models import AuthUser
+from citeo.auth.rate_limiter import get_analyze_rate_limiter
 from citeo.config.settings import Settings
 from citeo.notifiers.base import Notifier
 from citeo.notifiers.factory import create_notifier
@@ -239,6 +243,23 @@ class PaperListResponse(BaseModel):
 _analysis_tasks: dict[str, str] = {}  # arxiv_id -> status
 
 
+async def check_analyze_rate_limit(user: AuthUser = Depends(require_auth)) -> AuthUser:
+    """Check rate limit for analyze endpoint.
+
+    Reason: /analyze triggers expensive OpenAI calls, needs protection.
+    """
+    rate_limiter = get_analyze_rate_limiter()
+    try:
+        rate_limiter.check_rate_limit(user.user_id)
+    except RateLimitExceededError as e:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Rate limit exceeded. Retry after {e.retry_after} seconds.",
+            headers={"Retry-After": str(e.retry_after)},
+        )
+    return user
+
+
 async def _run_analysis_background(arxiv_id: str, force: bool = False) -> None:
     """Run PDF analysis in background.
 
@@ -267,6 +288,7 @@ async def health_check() -> HealthResponse:
 async def analyze_paper(
     arxiv_id: str,
     background_tasks: BackgroundTasks,
+    user: AuthUser = Depends(check_analyze_rate_limit),
     sync: bool = False,
     force: bool = Query(False, description="Force re-analysis even if cached"),
 ) -> AnalyzeResponse:
@@ -322,7 +344,9 @@ async def analyze_paper(
 
 
 @router.get("/papers/{arxiv_id}/analysis", response_model=AnalyzeResponse)
-async def get_analysis(arxiv_id: str) -> AnalyzeResponse:
+async def get_analysis(
+    arxiv_id: str, user: AuthUser = Depends(require_auth)
+) -> AnalyzeResponse:
     """Get PDF analysis result for a paper.
 
     Args:
@@ -361,6 +385,7 @@ async def get_analysis(arxiv_id: str) -> AnalyzeResponse:
 
 @router.get("/papers/by-date", response_model=PaperListResponse)
 async def get_papers_by_date(
+    user: AuthUser = Depends(require_auth),
     date: str | None = Query(None, description="Single date query (YYYY-MM-DD)"),
     start_date: str | None = Query(None, description="Range query start date"),
     end_date: str | None = Query(None, description="Range query end date"),
@@ -431,7 +456,7 @@ async def get_papers_by_date(
 
 
 @router.get("/papers/{arxiv_id}", response_model=PaperResponse)
-async def get_paper(arxiv_id: str) -> PaperResponse:
+async def get_paper(arxiv_id: str, user: AuthUser = Depends(require_auth)) -> PaperResponse:
     """Get paper information by arXiv ID.
 
     Args:

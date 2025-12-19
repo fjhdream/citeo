@@ -17,6 +17,7 @@ from fastapi import FastAPI
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from citeo.api import init_services, router
+from citeo.api.auth_routes import router as auth_router
 from citeo.config.settings import settings
 from citeo.notifiers import create_notifier
 from citeo.parsers.arxiv_parser import ArxivParser
@@ -116,6 +117,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.include_router(router)
+    app.include_router(auth_router)
     return app
 
 

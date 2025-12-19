@@ -4,7 +4,6 @@ Supports environment variables and .env file loading.
 """
 
 from pathlib import Path
-from typing import List
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -88,7 +87,7 @@ class Settings(BaseSettings):
     )
 
     # Notifier selection (supports multiple: "telegram,feishu")
-    notifier_types: List[str] = Field(
+    notifier_types: list[str] = Field(
         default=["telegram"],
         description="Notification channels to use (comma-separated)",
     )
@@ -118,7 +117,7 @@ class Settings(BaseSettings):
     )
 
     # Feed URLs (simple config, can also use database for complex scenarios)
-    feed_urls: List[str] = Field(
+    feed_urls: list[str] = Field(
         default=["https://rss.arxiv.org/rss/cs.AI"],
         description="RSS feed URLs to subscribe",
     )
@@ -126,6 +125,44 @@ class Settings(BaseSettings):
     # API
     api_host: str = "0.0.0.0"
     api_port: int = 8000
+
+    # Authentication
+    auth_enabled: bool = Field(
+        default=True,
+        description="Enable API authentication (set False to disable all auth)",
+    )
+    auth_api_key: SecretStr | None = Field(
+        default=None,
+        description="API key for X-API-Key header authentication",
+    )
+    auth_jwt_secret: SecretStr | None = Field(
+        default=None,
+        description="Secret key for JWT token signing (min 32 chars recommended)",
+    )
+    auth_jwt_access_token_expiry_minutes: int = Field(
+        default=60,
+        ge=1,
+        le=1440,  # Max 24 hours
+        description="Access token expiry time in minutes (for API access)",
+    )
+    auth_jwt_refresh_token_expiry_days: int = Field(
+        default=7,
+        ge=1,
+        le=30,  # Max 30 days
+        description="Refresh token expiry time in days (for token refresh)",
+    )
+
+    # Rate Limiting
+    rate_limit_analyze_requests: int = Field(
+        default=10,
+        ge=1,
+        description="Max /analyze requests per window",
+    )
+    rate_limit_analyze_window: int = Field(
+        default=60,
+        ge=1,
+        description="Rate limit window in seconds",
+    )
 
 
 # Global singleton instance
