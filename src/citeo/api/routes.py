@@ -9,6 +9,8 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from citeo.config.settings import Settings
+from citeo.notifiers.base import Notifier
+from citeo.notifiers.factory import create_notifier
 from citeo.services.pdf_service import PDFService
 from citeo.storage import PaperStorage, create_storage
 
@@ -17,6 +19,7 @@ router = APIRouter(prefix="/api", tags=["papers"])
 # Service instances (will be initialized on app startup)
 _storage: PaperStorage | None = None
 _pdf_service: PDFService | None = None
+_notifier: Notifier | None = None
 
 
 def init_services(settings: Settings) -> None:
@@ -27,9 +30,39 @@ def init_services(settings: Settings) -> None:
     Args:
         settings: Application settings.
     """
-    global _storage, _pdf_service
+    global _storage, _pdf_service, _notifier
     _storage = create_storage(settings)
-    _pdf_service = PDFService(_storage)
+
+    # Create notifier if configured
+    # Reason: Notifier is optional, only create if notifier_types is configured
+    try:
+        if settings.notifier_types:
+            _notifier = create_notifier(
+                notifier_types=settings.notifier_types,
+                telegram_token=(
+                    settings.telegram_bot_token.get_secret_value()
+                    if settings.telegram_bot_token
+                    else None
+                ),
+                telegram_chat_id=settings.telegram_chat_id,
+                feishu_webhook_url=(
+                    settings.feishu_webhook_url.get_secret_value()
+                    if settings.feishu_webhook_url
+                    else None
+                ),
+                feishu_secret=(
+                    settings.feishu_secret.get_secret_value() if settings.feishu_secret else None
+                ),
+            )
+    except ValueError as e:
+        # Log warning but don't fail initialization
+        import structlog
+
+        logger = structlog.get_logger()
+        logger.warning("Failed to create notifier", error=str(e))
+        _notifier = None
+
+    _pdf_service = PDFService(_storage, notifier=_notifier)
 
 
 def get_pdf_service() -> PDFService:
@@ -206,11 +239,16 @@ class PaperListResponse(BaseModel):
 _analysis_tasks: dict[str, str] = {}  # arxiv_id -> status
 
 
-async def _run_analysis_background(arxiv_id: str) -> None:
-    """Run PDF analysis in background."""
+async def _run_analysis_background(arxiv_id: str, force: bool = False) -> None:
+    """Run PDF analysis in background.
+
+    Args:
+        arxiv_id: arXiv paper ID.
+        force: If True, force re-analysis even if cached.
+    """
     _analysis_tasks[arxiv_id] = "processing"
     try:
-        result = await get_pdf_service().analyze_paper(arxiv_id)
+        result = await get_pdf_service().analyze_paper(arxiv_id, force=force)
         _analysis_tasks[arxiv_id] = result.get("status", "completed")
     except Exception as e:
         _analysis_tasks[arxiv_id] = f"error: {e}"
@@ -230,12 +268,14 @@ async def analyze_paper(
     arxiv_id: str,
     background_tasks: BackgroundTasks,
     sync: bool = False,
+    force: bool = Query(False, description="Force re-analysis even if cached"),
 ) -> AnalyzeResponse:
     """Trigger PDF deep analysis for a paper.
 
     Args:
         arxiv_id: arXiv paper ID.
         sync: If True, wait for analysis to complete. Otherwise run in background.
+        force: If True, force re-analysis even if cached result exists.
 
     Returns:
         Analysis result or processing status.
@@ -245,7 +285,7 @@ async def analyze_paper(
     if sync:
         # Synchronous mode: wait for completion
         try:
-            result = await pdf_service.analyze_paper(arxiv_id)
+            result = await pdf_service.analyze_paper(arxiv_id, force=force)
             return AnalyzeResponse(
                 arxiv_id=arxiv_id,
                 status=result["status"],
@@ -265,15 +305,15 @@ async def analyze_paper(
                 detail=f"Paper with arXiv ID {arxiv_id} not found",
             )
 
-        # Check if already processing
-        if arxiv_id in _analysis_tasks and _analysis_tasks[arxiv_id] == "processing":
+        # Check if already processing (skip check if force=True to allow re-queueing)
+        if not force and arxiv_id in _analysis_tasks and _analysis_tasks[arxiv_id] == "processing":
             return AnalyzeResponse(
                 arxiv_id=arxiv_id,
                 status="processing",
             )
 
         # Start background task
-        background_tasks.add_task(_run_analysis_background, arxiv_id)
+        background_tasks.add_task(_run_analysis_background, arxiv_id, force)
 
         return AnalyzeResponse(
             arxiv_id=arxiv_id,

@@ -286,3 +286,100 @@ class FeishuNotifier:
             },
             "elements": elements,
         }
+
+    async def send_deep_analysis(self, paper: Paper) -> bool:
+        """Send PDF deep analysis notification for a paper.
+
+        Uses Feishu interactive card for rich formatting.
+
+        Args:
+            paper: The paper with deep_analysis in summary.
+
+        Returns:
+            True if notification was sent successfully.
+        """
+        log = logger.bind(arxiv_id=paper.arxiv_id)
+
+        # Check if deep analysis exists
+        if not paper.summary or not paper.summary.deep_analysis:
+            log.warning("No deep analysis available for paper")
+            return False
+
+        card = self._build_deep_analysis_card(paper)
+        payload = {"msg_type": "interactive", "card": card}
+
+        success = await self._send_request(payload)
+        if success:
+            log.info("Feishu deep analysis notification sent")
+        return success
+
+    def _build_deep_analysis_card(self, paper: Paper) -> dict[str, Any]:
+        """Build Feishu interactive card for deep analysis.
+
+        Reason: Use interactive cards for consistent rich formatting.
+        """
+        if not paper.summary or not paper.summary.deep_analysis:
+            return {}
+
+        summary = paper.summary
+
+        # Title
+        title = summary.title_zh if summary.title_zh else paper.title
+
+        # Deep analysis content
+        analysis = summary.deep_analysis
+
+        # Truncate if too long
+        if len(analysis) > 2500:
+            analysis = analysis[:2500] + "\n\n[分析内容过长，已截断...]"
+
+        # Build card elements
+        elements: list[dict[str, Any]] = []
+
+        # Header note
+        elements.append(
+            {
+                "tag": "markdown",
+                "content": f"**{paper.arxiv_id}**",
+            }
+        )
+
+        elements.append({"tag": "hr"})
+
+        # Deep analysis content
+        elements.append(
+            {
+                "tag": "markdown",
+                "content": analysis,
+            }
+        )
+
+        # Action buttons
+        elements.append({"tag": "hr"})
+        elements.append(
+            {
+                "tag": "action",
+                "actions": [
+                    {
+                        "tag": "button",
+                        "text": {"tag": "plain_text", "content": "📄 Abstract"},
+                        "type": "primary",
+                        "url": paper.abs_url,
+                    },
+                    {
+                        "tag": "button",
+                        "text": {"tag": "plain_text", "content": "📥 PDF"},
+                        "type": "default",
+                        "url": paper.pdf_url,
+                    },
+                ],
+            }
+        )
+
+        return {
+            "header": {
+                "template": "green",
+                "title": {"tag": "plain_text", "content": f"🔬 深度分析: {title[:40]}"},
+            },
+            "elements": elements,
+        }

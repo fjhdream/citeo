@@ -176,19 +176,14 @@ class TelegramNotifier:
         # Links
         parts.append("")
         parts.append(
-            f"🔗 <a href='{paper.abs_url}'>Abstract</a> | "
-            f"<a href='{paper.pdf_url}'>PDF</a>"
+            f"🔗 <a href='{paper.abs_url}'>Abstract</a> | " f"<a href='{paper.pdf_url}'>PDF</a>"
         )
 
         return "\n".join(parts)
 
     def _escape_html(self, text: str) -> str:
         """Escape HTML special characters."""
-        return (
-            text.replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-        )
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
     def _get_score_emoji(self, score: float) -> str:
         """Get emoji based on relevance score."""
@@ -200,3 +195,76 @@ class TelegramNotifier:
             return "📊"
         else:
             return "📄"
+
+    async def send_deep_analysis(self, paper: Paper) -> bool:
+        """Send PDF deep analysis notification for a paper.
+
+        Args:
+            paper: The paper with deep_analysis in summary.
+
+        Returns:
+            bool: True if notification was sent successfully.
+        """
+        log = logger.bind(arxiv_id=paper.arxiv_id, chat_id=self._chat_id)
+
+        # Check if deep analysis exists
+        if not paper.summary or not paper.summary.deep_analysis:
+            log.warning("No deep analysis available for paper")
+            return False
+
+        message = self._format_deep_analysis_message(paper)
+
+        try:
+            await self._bot.send_message(
+                chat_id=self._chat_id,
+                text=message,
+                parse_mode=ParseMode.HTML,
+                disable_web_page_preview=False,
+            )
+            log.info("Deep analysis notification sent")
+            return True
+
+        except TelegramError as e:
+            log.error("Failed to send deep analysis notification", error=str(e))
+            return False
+
+    def _format_deep_analysis_message(self, paper: Paper) -> str:
+        """Format deep analysis as Telegram message.
+
+        Reason: Separate formatting for deep analysis to keep messages focused.
+        """
+        if not paper.summary or not paper.summary.deep_analysis:
+            return ""
+
+        parts = []
+
+        # Header
+        parts.append("🔬 <b>深度分析完成</b>\n")
+
+        # Title
+        title = paper.summary.title_zh if paper.summary.title_zh else paper.title
+        parts.append(f"<b>{self._escape_html(title)}</b>")
+        parts.append(f"<code>{paper.arxiv_id}</code>\n")
+
+        # Deep analysis content
+        analysis = paper.summary.deep_analysis
+
+        # Truncate if too long (keep it under Telegram limit)
+        if len(analysis) > 3000:
+            analysis = analysis[:3000] + "\n\n[分析内容过长，已截断...]"
+
+        parts.append(self._escape_html(analysis))
+
+        # Links
+        parts.append("")
+        parts.append(
+            f"🔗 <a href='{paper.abs_url}'>Abstract</a> | " f"<a href='{paper.pdf_url}'>PDF</a>"
+        )
+
+        message = "\n".join(parts)
+
+        # Final length check
+        if len(message) > MAX_MESSAGE_LENGTH:
+            message = message[: MAX_MESSAGE_LENGTH - 20] + "\n\n[截断...]"
+
+        return message

@@ -42,17 +42,13 @@ def create_notifier(
                 raise ValueError(
                     "Telegram notifier requires TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID"
                 )
-            notifiers.append(
-                TelegramNotifier(token=telegram_token, chat_id=telegram_chat_id)
-            )
+            notifiers.append(TelegramNotifier(token=telegram_token, chat_id=telegram_chat_id))
             logger.info("Telegram notifier configured", chat_id=telegram_chat_id)
 
         elif ntype == "feishu":
             if not feishu_webhook_url:
                 raise ValueError("Feishu notifier requires FEISHU_WEBHOOK_URL")
-            notifiers.append(
-                FeishuNotifier(webhook_url=feishu_webhook_url, secret=feishu_secret)
-            )
+            notifiers.append(FeishuNotifier(webhook_url=feishu_webhook_url, secret=feishu_secret))
             logger.info("Feishu notifier configured")
 
         else:

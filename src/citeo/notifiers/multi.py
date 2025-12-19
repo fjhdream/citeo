@@ -91,3 +91,29 @@ class MultiNotifier:
         )
 
         return any(r is True for r in results)
+
+    async def send_deep_analysis(self, paper: Paper) -> bool:
+        """Send PDF deep analysis notification to all channels.
+
+        Args:
+            paper: The paper with deep_analysis in summary.
+
+        Returns:
+            True if at least one channel succeeded.
+        """
+        if not self._notifiers:
+            return False
+
+        results = await asyncio.gather(
+            *[n.send_deep_analysis(paper) for n in self._notifiers],
+            return_exceptions=True,
+        )
+
+        success = any(r is True for r in results)
+        failures = [r for r in results if isinstance(r, Exception)]
+
+        if failures:
+            for e in failures:
+                logger.warning("Notifier failed to send deep analysis", error=str(e))
+
+        return success

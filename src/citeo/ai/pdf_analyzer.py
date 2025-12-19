@@ -17,7 +17,7 @@ from citeo.exceptions import AIProcessingError, PDFDownloadError
 logger = structlog.get_logger()
 
 # Maximum text length to send to AI (to avoid token limits)
-MAX_PDF_TEXT_LENGTH = 50000
+MAX_PDF_TEXT_LENGTH = 500000
 
 
 async def download_pdf(pdf_url: str, timeout: int = 60) -> bytes:
@@ -151,21 +151,35 @@ async def analyze_pdf(arxiv_id: str, pdf_url: str) -> str:
 
 
 def _format_analysis(output: PDFAnalysisOutput) -> str:
-    """Format analysis output as readable text."""
+    """Format analysis output as readable text.
+
+    Reason: Put plain-language explanations first for better readability.
+    """
     sections = [
-        "## 研究方法",
+        "## 💡 这篇论文在研究什么？",
+        output.methodology_explained,
+        "",
+        "## 🎯 发现了什么重要的东西？",
+        output.key_findings_explained,
+        "",
+        "## 🌍 对我们有什么影响？",
+        output.impact_explained,
+        "",
+        "## 📋 专业总结",
+        "",
+        "### 研究方法",
         output.methodology,
         "",
-        "## 关键发现",
+        "### 关键发现",
         *[f"- {finding}" for finding in output.key_findings],
         "",
-        "## 局限性",
+        "### 局限性",
         *[f"- {limitation}" for limitation in output.limitations],
         "",
-        "## 未来工作方向",
+        "### 未来工作方向",
         output.future_work,
         "",
-        "## 整体评价",
+        "### 整体评价",
         output.overall_assessment,
     ]
 

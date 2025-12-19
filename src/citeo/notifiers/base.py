@@ -32,3 +32,14 @@ class Notifier(Protocol):
             bool: True if message was sent successfully.
         """
         ...
+
+    async def send_deep_analysis(self, paper: Paper) -> bool:
+        """Send PDF deep analysis notification for a paper.
+
+        Args:
+            paper: The paper with deep_analysis in summary.
+
+        Returns:
+            bool: True if notification was sent successfully.
+        """
+        ...
