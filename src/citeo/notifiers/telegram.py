@@ -25,17 +25,25 @@ class TelegramNotifier:
     Each paper is sent as an individual message (逐篇推送).
     """
 
-    def __init__(self, token: str, chat_id: str, rate_limit_delay: float = 0.5):
+    def __init__(
+        self,
+        token: str,
+        chat_id: str,
+        rate_limit_delay: float = 0.5,
+        url_generator=None,
+    ):
         """Initialize Telegram notifier.
 
         Args:
             token: Telegram Bot token.
             chat_id: Target chat ID to send messages to.
             rate_limit_delay: Delay between messages to avoid rate limiting.
+            url_generator: Optional SignedURLGenerator for creating analysis links.
         """
         self._bot = Bot(token=token)
         self._chat_id = chat_id
         self._rate_limit_delay = rate_limit_delay
+        self._url_generator = url_generator
 
     async def send_paper(self, paper: Paper) -> bool:
         """Send notification for a single paper.
@@ -174,11 +182,31 @@ class TelegramNotifier:
             score_emoji = self._get_score_emoji(summary.relevance_score)
             parts.append(f"\n{score_emoji} 推荐度: {summary.relevance_score:.1f}/10")
 
-        # Links
+        # Links (with deep analysis link if URL generator available)
         parts.append("")
-        parts.append(
-            f"🔗 <a href='{paper.abs_url}'>Abstract</a> | " f"<a href='{paper.pdf_url}'>PDF</a>"
-        )
+
+        if self._url_generator:
+            try:
+                analysis_url = self._url_generator.generate_analysis_url(
+                    arxiv_id=paper.arxiv_id, platform="telegram"
+                )
+                parts.append(
+                    f"🔗 <a href='{paper.abs_url}'>Abstract</a> | "
+                    f"<a href='{paper.pdf_url}'>PDF</a> | "
+                    f"<a href='{analysis_url}'>深度分析</a>"
+                )
+            except Exception as e:
+                # Fallback if URL generation fails
+                logger.warning("Failed to generate analysis URL", error=str(e))
+                parts.append(
+                    f"🔗 <a href='{paper.abs_url}'>Abstract</a> | "
+                    f"<a href='{paper.pdf_url}'>PDF</a>"
+                )
+        else:
+            # Original format without analysis link
+            parts.append(
+                f"🔗 <a href='{paper.abs_url}'>Abstract</a> | " f"<a href='{paper.pdf_url}'>PDF</a>"
+            )
 
         return "\n".join(parts)
 
@@ -194,13 +222,13 @@ class TelegramNotifier:
         if score >= 9:
             return "🔥🔥"  # 9-10: Must-read for programmers
         elif score >= 8:
-            return "🔥"    # 8: Highly recommended
+            return "🔥"  # 8: Highly recommended
         elif score >= 6:
-            return "⭐"    # 6-7: Worth reading
+            return "⭐"  # 6-7: Worth reading
         elif score >= 4:
-            return "📊"    # 4-5: Moderate interest
+            return "📊"  # 4-5: Moderate interest
         else:
-            return "📄"    # 1-3: Low relevance
+            return "📄"  # 1-3: Low relevance
 
     async def send_deep_analysis(self, paper: Paper) -> bool:
         """Send PDF deep analysis notification for a paper.

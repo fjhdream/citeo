@@ -152,6 +152,22 @@ class Settings(BaseSettings):
         description="Refresh token expiry time in days (for token refresh)",
     )
 
+    # Signed URL (for notification deep analysis links)
+    signed_url_secret: SecretStr | None = Field(
+        default=None,
+        description="Secret key for signed URL generation (min 32 chars recommended)",
+    )
+    signed_url_expiry_hours: int = Field(
+        default=24,
+        ge=1,
+        le=168,  # Max 7 days
+        description="Signed URL expiry time in hours",
+    )
+    api_base_url: str = Field(
+        default="http://localhost:8000",
+        description="Base URL for API endpoints (used in notification links)",
+    )
+
     # Rate Limiting
     rate_limit_analyze_requests: int = Field(
         default=10,

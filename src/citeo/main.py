@@ -31,8 +31,20 @@ from citeo.utils.logger import configure_logging, get_logger
 def _create_notifier():
     """Create notifier based on settings.
 
-    Reason: Centralized notifier creation with proper secret extraction.
+    Reason: Centralized notifier creation with proper secret extraction and URL generator.
     """
+    from citeo.auth.signed_url import get_url_generator
+
+    logger = get_logger("notifier")
+
+    # Initialize URL generator if configured
+    url_generator = None
+    try:
+        url_generator = get_url_generator()
+        logger.info("URL generator initialized for notification links")
+    except ValueError as e:
+        logger.warning("URL generator not configured, analysis links disabled", error=str(e))
+
     return create_notifier(
         notifier_types=settings.notifier_types,
         telegram_token=(
@@ -45,6 +57,7 @@ def _create_notifier():
         feishu_secret=(
             settings.feishu_secret.get_secret_value() if settings.feishu_secret else None
         ),
+        url_generator=url_generator,
     )
 
 

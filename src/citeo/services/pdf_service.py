@@ -29,20 +29,26 @@ class PDFService:
         self._storage = storage
         self._notifier = notifier
 
-    async def analyze_paper(self, arxiv_id: str, force: bool = False) -> dict:
+    async def analyze_paper(
+        self, arxiv_id: str, force: bool = False, skip_notification: bool = False
+    ) -> dict:
         """Analyze a paper's PDF by arXiv ID.
 
         Args:
             arxiv_id: arXiv paper ID (e.g., "2512.14709").
             force: If True, force re-analysis even if cached result exists.
+            skip_notification: If True, skip sending notification after analysis.
 
         Returns:
             dict: Analysis result with status and content.
 
         Raises:
             ValueError: If paper not found in database.
+
+        Reason: skip_notification allows platform-specific notification handling
+        when analysis is triggered from signed URLs.
         """
-        log = logger.bind(arxiv_id=arxiv_id, force=force)
+        log = logger.bind(arxiv_id=arxiv_id, force=force, skip_notification=skip_notification)
         log.info("PDF analysis requested")
 
         # Get paper from storage
@@ -69,9 +75,9 @@ class PDFService:
 
             log.info("PDF analysis completed")
 
-            # Send notification if notifier is configured
+            # Send notification if notifier is configured (unless skipped)
             # Reason: Fetch updated paper from storage to ensure we have the latest data
-            if self._notifier:
+            if not skip_notification and self._notifier:
                 updated_paper = await self._storage.get_paper_by_arxiv_id(arxiv_id)
                 if updated_paper and updated_paper.summary and updated_paper.summary.deep_analysis:
                     try:

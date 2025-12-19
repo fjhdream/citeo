@@ -5,6 +5,7 @@ Provides REST API endpoints for PDF analysis and paper queries.
 
 from datetime import datetime, timedelta
 
+import structlog
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
@@ -12,11 +13,14 @@ from citeo.auth.dependencies import require_auth
 from citeo.auth.exceptions import RateLimitExceededError
 from citeo.auth.models import AuthUser
 from citeo.auth.rate_limiter import get_analyze_rate_limiter
+from citeo.auth.signed_url import get_url_generator
 from citeo.config.settings import Settings
 from citeo.notifiers.base import Notifier
 from citeo.notifiers.factory import create_notifier
 from citeo.services.pdf_service import PDFService
 from citeo.storage import PaperStorage, create_storage
+
+logger = structlog.get_logger()
 
 router = APIRouter(prefix="/api", tags=["papers"])
 
@@ -36,6 +40,16 @@ def init_services(settings: Settings) -> None:
     """
     global _storage, _pdf_service, _notifier
     _storage = create_storage(settings)
+
+    # Initialize URL generator if configured
+    url_generator = None
+    try:
+        from citeo.auth.signed_url import get_url_generator
+
+        url_generator = get_url_generator()
+        logger.info("URL generator initialized for API services")
+    except ValueError as e:
+        logger.warning("URL generator not configured, analysis links disabled", error=str(e))
 
     # Create notifier if configured
     # Reason: Notifier is optional, only create if notifier_types is configured
@@ -57,12 +71,10 @@ def init_services(settings: Settings) -> None:
                 feishu_secret=(
                     settings.feishu_secret.get_secret_value() if settings.feishu_secret else None
                 ),
+                url_generator=url_generator,
             )
     except ValueError as e:
         # Log warning but don't fail initialization
-        import structlog
-
-        logger = structlog.get_logger()
         logger.warning("Failed to create notifier", error=str(e))
         _notifier = None
 
@@ -275,6 +287,97 @@ async def _run_analysis_background(arxiv_id: str, force: bool = False) -> None:
         _analysis_tasks[arxiv_id] = f"error: {e}"
 
 
+async def _run_analysis_background_with_platform(
+    arxiv_id: str, platform: str, force: bool = False
+) -> None:
+    """Run PDF analysis in background with platform-specific notification.
+
+    Args:
+        arxiv_id: arXiv paper ID.
+        platform: Platform that triggered analysis (telegram, feishu).
+        force: If True, force re-analysis even if cached.
+
+    Reason: Isolate notifications to the triggering platform only.
+    """
+    _analysis_tasks[arxiv_id] = "processing"
+
+    try:
+        # Get services
+        pdf_service = get_pdf_service()
+        storage = get_storage()
+
+        # Perform analysis without sending notification in service
+        result = await pdf_service.analyze_paper(arxiv_id, force=force, skip_notification=True)
+
+        _analysis_tasks[arxiv_id] = result.get("status", "completed")
+
+        # Send platform-specific notification on success
+        if result["status"] == "completed":
+            paper = await storage.get_paper_by_arxiv_id(arxiv_id)
+            if paper and paper.summary and paper.summary.deep_analysis:
+                # Get platform-specific notifier
+                notifier = _get_platform_notifier(platform)
+                if notifier:
+                    await notifier.send_deep_analysis(paper)
+                    logger.info(
+                        "Platform-specific analysis notification sent",
+                        arxiv_id=arxiv_id,
+                        platform=platform,
+                    )
+                else:
+                    logger.warning(
+                        "No notifier found for platform",
+                        platform=platform,
+                    )
+
+    except Exception as e:
+        _analysis_tasks[arxiv_id] = f"error: {e}"
+        logger.error(
+            "Background analysis failed",
+            arxiv_id=arxiv_id,
+            platform=platform,
+            error=str(e),
+        )
+
+
+def _get_platform_notifier(platform: str) -> Notifier | None:
+    """Get notifier instance for specific platform.
+
+    Args:
+        platform: Platform identifier (telegram or feishu).
+
+    Returns:
+        Platform-specific notifier instance, or None if not found.
+
+    Reason: Isolate notifications to the triggering platform only.
+    When MultiNotifier is used, extract the specific platform notifier.
+    """
+    if not _notifier:
+        return None
+
+    # Import notifier types
+    from citeo.notifiers.feishu import FeishuNotifier
+    from citeo.notifiers.multi import MultiNotifier
+    from citeo.notifiers.telegram import TelegramNotifier
+
+    # If _notifier is MultiNotifier, extract the specific platform notifier
+    if isinstance(_notifier, MultiNotifier):
+        # Access internal notifiers list
+        for n in _notifier._notifiers:
+            if platform == "telegram" and isinstance(n, TelegramNotifier):
+                return n
+            elif platform == "feishu" and isinstance(n, FeishuNotifier):
+                return n
+        return None
+    else:
+        # Single notifier - check if it matches platform
+        if platform == "telegram" and isinstance(_notifier, TelegramNotifier):
+            return _notifier
+        elif platform == "feishu" and isinstance(_notifier, FeishuNotifier):
+            return _notifier
+        return None
+
+
 # Routes
 
 
@@ -282,6 +385,117 @@ async def _run_analysis_background(arxiv_id: str, force: bool = False) -> None:
 async def health_check() -> HealthResponse:
     """Health check endpoint."""
     return HealthResponse(status="ok", version="0.1.0")
+
+
+@router.get("/papers/trigger-analysis")
+async def trigger_analysis_signed(
+    arxiv_id: str = Query(..., description="arXiv paper ID"),
+    platform: str = Query(..., description="Platform identifier (telegram, feishu)"),
+    timestamp: int = Query(..., description="Unix timestamp"),
+    nonce: str = Query(..., description="Unique nonce (UUID)"),
+    signature: str = Query(..., description="HMAC signature"),
+    background_tasks: BackgroundTasks = None,
+) -> dict:
+    """Trigger PDF analysis via signed URL (no authentication required).
+
+    This endpoint is called from notification platforms (Telegram, Feishu)
+    when users click the "深度分析" link. The URL is signed with HMAC-SHA256
+    and includes a one-time-use nonce to prevent replay attacks.
+
+    Args:
+        arxiv_id: arXiv paper ID.
+        platform: Platform that triggered the request.
+        timestamp: URL generation timestamp.
+        nonce: One-time-use unique identifier.
+        signature: HMAC-SHA256 signature of parameters.
+
+    Returns:
+        Status dict indicating processing has started.
+
+    Raises:
+        HTTPException(401): If signature verification fails.
+        HTTPException(404): If paper not found.
+    """
+    # 1. Verify signed URL
+    try:
+        url_generator = get_url_generator()
+    except ValueError as e:
+        logger.error("URL generator not configured", error=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail="Signed URL feature not configured on server",
+        )
+
+    verification = await url_generator.verify_url(
+        arxiv_id=arxiv_id,
+        platform=platform,
+        timestamp=timestamp,
+        nonce=nonce,
+        signature=signature,
+    )
+
+    if not verification.valid:
+        logger.warning(
+            "Signed URL verification failed",
+            arxiv_id=arxiv_id,
+            platform=platform,
+            error=verification.error,
+        )
+        raise HTTPException(
+            status_code=401,
+            detail=f"Invalid signed URL: {verification.error}",
+        )
+
+    # 2. Mark nonce as used (prevent replay)
+    nonce_storage = url_generator._nonce_storage
+    if nonce_storage:
+        success = await nonce_storage.mark_nonce_used(nonce, arxiv_id, platform)
+        if not success:
+            # Nonce already used
+            return {
+                "arxiv_id": arxiv_id,
+                "status": "already_triggered",
+                "message": "分析已触发，请勿重复点击",
+            }
+
+    # 3. Check if paper exists
+    storage = get_storage()
+    paper = await storage.get_paper_by_arxiv_id(arxiv_id)
+    if not paper:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Paper with arXiv ID {arxiv_id} not found",
+        )
+
+    # 4. Check if already processing
+    if arxiv_id in _analysis_tasks and _analysis_tasks[arxiv_id] == "processing":
+        return {
+            "arxiv_id": arxiv_id,
+            "status": "processing",
+            "message": "分析正在进行中，完成后将推送通知",
+        }
+
+    # 5. Start background analysis with platform context
+    background_tasks.add_task(
+        _run_analysis_background_with_platform,
+        arxiv_id=arxiv_id,
+        platform=platform,
+        force=False,  # Don't force re-analysis from signed URL
+    )
+
+    logger.info(
+        "Signed URL analysis triggered",
+        arxiv_id=arxiv_id,
+        platform=platform,
+    )
+
+    # 6. Return immediately
+    return {
+        "arxiv_id": arxiv_id,
+        "status": "processing",
+        "message": "分析已开始，完成后将推送通知到"
+        + ("Telegram" if platform == "telegram" else "飞书"),
+    }
 
 
 @router.post("/papers/{arxiv_id}/analyze", response_model=AnalyzeResponse)
@@ -344,9 +558,7 @@ async def analyze_paper(
 
 
 @router.get("/papers/{arxiv_id}/analysis", response_model=AnalyzeResponse)
-async def get_analysis(
-    arxiv_id: str, user: AuthUser = Depends(require_auth)
-) -> AnalyzeResponse:
+async def get_analysis(arxiv_id: str, user: AuthUser = Depends(require_auth)) -> AnalyzeResponse:
     """Get PDF analysis result for a paper.
 
     Args:

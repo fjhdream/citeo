@@ -29,6 +29,7 @@ class FeishuNotifier:
         webhook_url: str,
         secret: str | None = None,
         rate_limit_delay: float = 0.5,
+        url_generator=None,
     ):
         """Initialize Feishu notifier.
 
@@ -36,10 +37,12 @@ class FeishuNotifier:
             webhook_url: Feishu bot webhook URL.
             secret: Optional signing secret for verification.
             rate_limit_delay: Delay between messages to avoid rate limiting.
+            url_generator: Optional SignedURLGenerator for creating analysis links.
         """
         self._webhook_url = webhook_url
         self._secret = secret
         self._rate_limit_delay = rate_limit_delay
+        self._url_generator = url_generator
 
     def _generate_sign(self, timestamp: int) -> str:
         """Generate signature for webhook verification.
@@ -260,27 +263,41 @@ class FeishuNotifier:
                 }
             )
 
-        # Action buttons
-        elements.append({"tag": "hr"})
-        elements.append(
+        # Action buttons (with deep analysis button if URL generator available)
+        actions = [
             {
-                "tag": "action",
-                "actions": [
+                "tag": "button",
+                "text": {"tag": "plain_text", "content": "📄 Abstract"},
+                "type": "primary",
+                "url": paper.abs_url,
+            },
+            {
+                "tag": "button",
+                "text": {"tag": "plain_text", "content": "📥 PDF"},
+                "type": "default",
+                "url": paper.pdf_url,
+            },
+        ]
+
+        # Add deep analysis button if URL generator available
+        if self._url_generator:
+            try:
+                analysis_url = self._url_generator.generate_analysis_url(
+                    arxiv_id=paper.arxiv_id, platform="feishu"
+                )
+                actions.append(
                     {
                         "tag": "button",
-                        "text": {"tag": "plain_text", "content": "📄 Abstract"},
-                        "type": "primary",
-                        "url": paper.abs_url,
-                    },
-                    {
-                        "tag": "button",
-                        "text": {"tag": "plain_text", "content": "📥 PDF"},
-                        "type": "default",
-                        "url": paper.pdf_url,
-                    },
-                ],
-            }
-        )
+                        "text": {"tag": "plain_text", "content": "🔬 深度分析"},
+                        "type": "danger",  # Red button for emphasis
+                        "url": analysis_url,
+                    }
+                )
+            except Exception as e:
+                logger.warning("Failed to generate analysis URL", error=str(e))
+
+        elements.append({"tag": "hr"})
+        elements.append({"tag": "action", "actions": actions})
 
         return {
             "header": {

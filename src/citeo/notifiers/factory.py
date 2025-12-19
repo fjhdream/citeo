@@ -16,6 +16,7 @@ def create_notifier(
     telegram_chat_id: str | None = None,
     feishu_webhook_url: str | None = None,
     feishu_secret: str | None = None,
+    url_generator=None,
 ) -> Notifier | MultiNotifier:
     """Create notifier(s) based on configuration.
 
@@ -25,6 +26,7 @@ def create_notifier(
         telegram_chat_id: Telegram chat ID.
         feishu_webhook_url: Feishu webhook URL.
         feishu_secret: Feishu signing secret.
+        url_generator: Optional SignedURLGenerator for creating analysis links.
 
     Returns:
         Single notifier or MultiNotifier if multiple types configured.
@@ -42,14 +44,33 @@ def create_notifier(
                 raise ValueError(
                     "Telegram notifier requires TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID"
                 )
-            notifiers.append(TelegramNotifier(token=telegram_token, chat_id=telegram_chat_id))
-            logger.info("Telegram notifier configured", chat_id=telegram_chat_id)
+            notifiers.append(
+                TelegramNotifier(
+                    token=telegram_token,
+                    chat_id=telegram_chat_id,
+                    url_generator=url_generator,
+                )
+            )
+            logger.info(
+                "Telegram notifier configured",
+                chat_id=telegram_chat_id,
+                has_url_generator=url_generator is not None,
+            )
 
         elif ntype == "feishu":
             if not feishu_webhook_url:
                 raise ValueError("Feishu notifier requires FEISHU_WEBHOOK_URL")
-            notifiers.append(FeishuNotifier(webhook_url=feishu_webhook_url, secret=feishu_secret))
-            logger.info("Feishu notifier configured")
+            notifiers.append(
+                FeishuNotifier(
+                    webhook_url=feishu_webhook_url,
+                    secret=feishu_secret,
+                    url_generator=url_generator,
+                )
+            )
+            logger.info(
+                "Feishu notifier configured",
+                has_url_generator=url_generator is not None,
+            )
 
         else:
             logger.warning("Unknown notifier type", type=ntype)
