@@ -74,9 +74,7 @@ class Settings(BaseSettings):
     )
 
     # Telegram (optional)
-    telegram_bot_token: SecretStr | None = Field(
-        default=None, description="Telegram Bot Token"
-    )
+    telegram_bot_token: SecretStr | None = Field(default=None, description="Telegram Bot Token")
     telegram_chat_id: str | None = Field(default=None, description="Target Chat ID")
 
     # Feishu/Lark (optional)
@@ -107,6 +105,11 @@ class Settings(BaseSettings):
     enable_translation: bool = True
     enable_deep_analysis: bool = False
     max_papers_per_batch: int = 50
+    ai_max_concurrent: int = Field(
+        default=5,
+        ge=1,
+        description="Maximum concurrent AI processing tasks (to avoid rate limits)",
+    )
 
     # Feed URLs (simple config, can also use database for complex scenarios)
     feed_urls: List[str] = Field(

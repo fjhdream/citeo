@@ -3,6 +3,7 @@
 Coordinates RSS fetching, AI processing, storage, and notifications.
 """
 
+import asyncio
 from typing import List
 
 import structlog
@@ -32,6 +33,7 @@ class PaperService:
         storage: PaperStorage,
         notifier: TelegramNotifier,
         enable_translation: bool = True,
+        max_concurrent_ai: int = 5,
     ):
         """Initialize paper service.
 
@@ -41,12 +43,14 @@ class PaperService:
             storage: Paper storage instance.
             notifier: Notification sender instance.
             enable_translation: Whether to enable AI translation.
+            max_concurrent_ai: Maximum concurrent AI processing tasks.
         """
         self._sources = sources
         self._parser = parser
         self._storage = storage
         self._notifier = notifier
         self._enable_translation = enable_translation
+        self._max_concurrent_ai = max_concurrent_ai
 
     async def run_daily_pipeline(self) -> dict:
         """Execute the daily processing pipeline.
@@ -133,24 +137,41 @@ class PaperService:
         return new_papers
 
     async def _process_with_ai(self, papers: List[Paper]) -> List[Paper]:
-        """Process papers with AI summarization/translation."""
-        processed = []
-        for paper in papers:
-            try:
-                summary = await summarize_paper(paper)
-                paper.summary = summary
-                # Update summary in database
-                await self._storage.update_summary(paper.guid, summary)
-                processed.append(paper)
-            except AIProcessingError as e:
-                logger.warning(
-                    "AI processing failed, using original",
-                    paper=paper.arxiv_id,
-                    error=str(e),
-                )
-                # Still include paper without summary
-                processed.append(paper)
-        return processed
+        """Process papers with AI summarization/translation.
+
+        Reason: Use asyncio.gather with Semaphore for parallel processing to speed up
+        AI calls while preventing rate limits. Papers with failed AI processing are still
+        included without summary.
+        """
+        # Create semaphore to limit concurrent AI requests
+        # Reason: Prevents overwhelming OpenAI API with too many parallel requests
+        semaphore = asyncio.Semaphore(self._max_concurrent_ai)
+
+        async def process_single(paper: Paper) -> Paper:
+            """Process a single paper with AI, respecting concurrency limit."""
+            async with semaphore:
+                try:
+                    summary = await summarize_paper(paper)
+                    paper.summary = summary
+                    # Update summary in database
+                    await self._storage.update_summary(paper.guid, summary)
+                except AIProcessingError as e:
+                    logger.warning(
+                        "AI processing failed, using original",
+                        paper=paper.arxiv_id,
+                        error=str(e),
+                    )
+                    # Paper will be returned without summary
+                return paper
+
+        # Process all papers in parallel (with concurrency limit)
+        # Reason: AI API calls are I/O bound, parallel execution significantly reduces total time
+        processed = await asyncio.gather(
+            *[process_single(paper) for paper in papers],
+            return_exceptions=False,  # Already handling exceptions inside process_single
+        )
+
+        return list(processed)
 
     async def _notify(self, papers: List[Paper]) -> int:
         """Send notifications for papers."""

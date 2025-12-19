@@ -16,8 +16,8 @@ from fastapi import FastAPI
 # Add project root to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from citeo.config.settings import settings
 from citeo.api import init_services, router
+from citeo.config.settings import settings
 from citeo.notifiers import create_notifier
 from citeo.parsers.arxiv_parser import ArxivParser
 from citeo.scheduler import create_scheduler, run_once
@@ -35,20 +35,14 @@ def _create_notifier():
     return create_notifier(
         notifier_types=settings.notifier_types,
         telegram_token=(
-            settings.telegram_bot_token.get_secret_value()
-            if settings.telegram_bot_token
-            else None
+            settings.telegram_bot_token.get_secret_value() if settings.telegram_bot_token else None
         ),
         telegram_chat_id=settings.telegram_chat_id,
         feishu_webhook_url=(
-            settings.feishu_webhook_url.get_secret_value()
-            if settings.feishu_webhook_url
-            else None
+            settings.feishu_webhook_url.get_secret_value() if settings.feishu_webhook_url else None
         ),
         feishu_secret=(
-            settings.feishu_secret.get_secret_value()
-            if settings.feishu_secret
-            else None
+            settings.feishu_secret.get_secret_value() if settings.feishu_secret else None
         ),
     )
 
@@ -87,6 +81,7 @@ async def lifespan(app: FastAPI):
         storage=storage,
         notifier=notifier,
         enable_translation=settings.enable_translation,
+        max_concurrent_ai=settings.ai_max_concurrent,
     )
 
     # Create and start scheduler
@@ -148,6 +143,7 @@ async def run_cli_once():
         storage=storage,
         notifier=notifier,
         enable_translation=settings.enable_translation,
+        max_concurrent_ai=settings.ai_max_concurrent,
     )
 
     # Run pipeline

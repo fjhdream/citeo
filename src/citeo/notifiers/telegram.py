@@ -253,7 +253,10 @@ class TelegramNotifier:
         if len(analysis) > 3000:
             analysis = analysis[:3000] + "\n\n[分析内容过长，已截断...]"
 
-        parts.append(self._escape_html(analysis))
+        # Convert Markdown formatting to HTML
+        # Reason: Telegram HTML mode doesn't support Markdown, need to convert
+        analysis_html = self._markdown_to_html(analysis)
+        parts.append(analysis_html)
 
         # Links
         parts.append("")
@@ -268,3 +271,29 @@ class TelegramNotifier:
             message = message[: MAX_MESSAGE_LENGTH - 20] + "\n\n[截断...]"
 
         return message
+
+    def _markdown_to_html(self, text: str) -> str:
+        """Convert simple Markdown formatting to HTML for Telegram.
+
+        Reason: Telegram ParseMode.HTML doesn't support Markdown syntax.
+        """
+        lines = text.split("\n")
+        html_lines = []
+
+        for line in lines:
+            # Convert ## headings to bold
+            if line.startswith("## "):
+                line = f"<b>{self._escape_html(line[3:])}</b>"
+            # Convert ### subheadings to bold
+            elif line.startswith("### "):
+                line = f"<b>{self._escape_html(line[4:])}</b>"
+            # Convert bullet points
+            elif line.startswith("- "):
+                line = f"• {self._escape_html(line[2:])}"
+            else:
+                # Escape HTML for regular lines
+                line = self._escape_html(line)
+
+            html_lines.append(line)
+
+        return "\n".join(html_lines)

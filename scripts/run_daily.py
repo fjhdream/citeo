@@ -51,15 +51,11 @@ async def main(fetch_only: bool = False):
     notifier = create_notifier(
         notifier_types=settings.notifier_types,
         telegram_token=(
-            settings.telegram_bot_token.get_secret_value()
-            if settings.telegram_bot_token
-            else None
+            settings.telegram_bot_token.get_secret_value() if settings.telegram_bot_token else None
         ),
         telegram_chat_id=settings.telegram_chat_id,
         feishu_webhook_url=(
-            settings.feishu_webhook_url.get_secret_value()
-            if settings.feishu_webhook_url
-            else None
+            settings.feishu_webhook_url.get_secret_value() if settings.feishu_webhook_url else None
         ),
         feishu_secret=(
             settings.feishu_secret.get_secret_value() if settings.feishu_secret else None
@@ -73,6 +69,7 @@ async def main(fetch_only: bool = False):
         storage=storage,
         notifier=notifier,
         enable_translation=settings.enable_translation,
+        max_concurrent_ai=settings.ai_max_concurrent,
     )
 
     # Run pipeline
