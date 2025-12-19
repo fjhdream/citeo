@@ -21,6 +21,7 @@ class Settings(BaseSettings):
         env_file=(".env", ".env.local"),  # .env.local overrides .env
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",  # Ignore extra env vars like OPENAI_AGENTS_DISABLE_TRACING
     )
 
     # Application
@@ -30,9 +31,27 @@ class Settings(BaseSettings):
     log_json: bool = False  # Set True in production for structured logs
 
     # Database
+    db_type: str = Field(
+        default="sqlite",
+        description="Database type: sqlite or d1",
+    )
     db_path: Path = Field(
         default=Path("data/citeo.db"),
-        description="SQLite database path",
+        description="SQLite database path (used when db_type=sqlite)",
+    )
+
+    # Cloudflare D1 Database (used when db_type=d1)
+    d1_account_id: str | None = Field(
+        default=None,
+        description="Cloudflare account ID",
+    )
+    d1_database_id: str | None = Field(
+        default=None,
+        description="Cloudflare D1 database ID",
+    )
+    d1_api_token: SecretStr | None = Field(
+        default=None,
+        description="Cloudflare API token with D1 permissions",
     )
 
     # OpenAI
@@ -44,9 +63,37 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o"
     openai_timeout: int = 60
 
-    # Telegram
-    telegram_bot_token: SecretStr = Field(..., description="Telegram Bot Token")
-    telegram_chat_id: str = Field(..., description="Target Chat ID")
+    # OpenAI Tracing (optional, for Agents SDK tracing feature)
+    openai_tracing_api_key: SecretStr | None = Field(
+        default=None,
+        description="Separate OpenAI API key for tracing (if using custom base URL)",
+    )
+    openai_tracing_enabled: bool = Field(
+        default=True,
+        description="Enable OpenAI Agents SDK tracing",
+    )
+
+    # Telegram (optional)
+    telegram_bot_token: SecretStr | None = Field(
+        default=None, description="Telegram Bot Token"
+    )
+    telegram_chat_id: str | None = Field(default=None, description="Target Chat ID")
+
+    # Feishu/Lark (optional)
+    feishu_webhook_url: SecretStr | None = Field(
+        default=None,
+        description="Feishu bot webhook URL",
+    )
+    feishu_secret: SecretStr | None = Field(
+        default=None,
+        description="Feishu webhook signing secret (optional)",
+    )
+
+    # Notifier selection (supports multiple: "telegram,feishu")
+    notifier_types: List[str] = Field(
+        default=["telegram"],
+        description="Notification channels to use (comma-separated)",
+    )
 
     # RSS
     rss_fetch_timeout: int = 30

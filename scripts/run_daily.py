@@ -15,11 +15,11 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root / "src"))
 
 from citeo.config.settings import settings
-from citeo.notifiers.telegram import TelegramNotifier
+from citeo.notifiers import create_notifier
 from citeo.parsers.arxiv_parser import ArxivParser
 from citeo.services.paper_service import PaperService
 from citeo.sources.arxiv import ArxivFeedSource
-from citeo.storage.sqlite import SQLitePaperStorage
+from citeo.storage import create_storage
 from citeo.utils.logger import configure_logging, get_logger
 
 
@@ -31,7 +31,7 @@ async def main(fetch_only: bool = False):
     logger.info("Initializing components")
 
     # Initialize storage
-    storage = SQLitePaperStorage(settings.db_path)
+    storage = create_storage(settings)
     await storage.initialize()
 
     # Create sources
@@ -47,10 +47,23 @@ async def main(fetch_only: bool = False):
     # Create parser
     parser = ArxivParser()
 
-    # Create notifier
-    notifier = TelegramNotifier(
-        token=settings.telegram_bot_token.get_secret_value(),
-        chat_id=settings.telegram_chat_id,
+    # Create notifier(s)
+    notifier = create_notifier(
+        notifier_types=settings.notifier_types,
+        telegram_token=(
+            settings.telegram_bot_token.get_secret_value()
+            if settings.telegram_bot_token
+            else None
+        ),
+        telegram_chat_id=settings.telegram_chat_id,
+        feishu_webhook_url=(
+            settings.feishu_webhook_url.get_secret_value()
+            if settings.feishu_webhook_url
+            else None
+        ),
+        feishu_secret=(
+            settings.feishu_secret.get_secret_value() if settings.feishu_secret else None
+        ),
     )
 
     # Create service

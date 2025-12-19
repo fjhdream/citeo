@@ -18,13 +18,39 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from citeo.config.settings import settings
 from citeo.api import init_services, router
-from citeo.notifiers.telegram import TelegramNotifier
+from citeo.notifiers import create_notifier
 from citeo.parsers.arxiv_parser import ArxivParser
 from citeo.scheduler import create_scheduler, run_once
 from citeo.services.paper_service import PaperService
 from citeo.sources.arxiv import ArxivFeedSource
-from citeo.storage.sqlite import SQLitePaperStorage
+from citeo.storage import create_storage
 from citeo.utils.logger import configure_logging, get_logger
+
+
+def _create_notifier():
+    """Create notifier based on settings.
+
+    Reason: Centralized notifier creation with proper secret extraction.
+    """
+    return create_notifier(
+        notifier_types=settings.notifier_types,
+        telegram_token=(
+            settings.telegram_bot_token.get_secret_value()
+            if settings.telegram_bot_token
+            else None
+        ),
+        telegram_chat_id=settings.telegram_chat_id,
+        feishu_webhook_url=(
+            settings.feishu_webhook_url.get_secret_value()
+            if settings.feishu_webhook_url
+            else None
+        ),
+        feishu_secret=(
+            settings.feishu_secret.get_secret_value()
+            if settings.feishu_secret
+            else None
+        ),
+    )
 
 
 @asynccontextmanager
@@ -37,12 +63,12 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Citeo application")
 
     # Initialize storage
-    storage = SQLitePaperStorage(settings.db_path)
+    storage = create_storage(settings)
     await storage.initialize()
-    logger.info("Storage initialized", db_path=str(settings.db_path))
+    logger.info("Storage initialized", db_type=settings.db_type)
 
     # Initialize API services
-    init_services(settings.db_path)
+    init_services(settings)
 
     # Create paper service
     sources = [
@@ -54,10 +80,7 @@ async def lifespan(app: FastAPI):
         for url in settings.feed_urls
     ]
     parser = ArxivParser()
-    notifier = TelegramNotifier(
-        token=settings.telegram_bot_token.get_secret_value(),
-        chat_id=settings.telegram_chat_id,
-    )
+    notifier = _create_notifier()
     paper_service = PaperService(
         sources=sources,
         parser=parser,
@@ -106,7 +129,7 @@ async def run_cli_once():
     logger.info("Running one-time pipeline")
 
     # Initialize components
-    storage = SQLitePaperStorage(settings.db_path)
+    storage = create_storage(settings)
     await storage.initialize()
 
     sources = [
@@ -118,10 +141,7 @@ async def run_cli_once():
         for url in settings.feed_urls
     ]
     parser = ArxivParser()
-    notifier = TelegramNotifier(
-        token=settings.telegram_bot_token.get_secret_value(),
-        chat_id=settings.telegram_chat_id,
-    )
+    notifier = _create_notifier()
     paper_service = PaperService(
         sources=sources,
         parser=parser,

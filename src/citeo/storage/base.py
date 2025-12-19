@@ -4,7 +4,7 @@ Defines the contract for paper storage implementations.
 """
 
 from datetime import datetime
-from typing import List, Optional, Protocol
+from typing import Protocol
 
 from citeo.models.paper import Paper, PaperSummary
 
@@ -31,7 +31,7 @@ class PaperStorage(Protocol):
         """
         ...
 
-    async def get_paper_by_guid(self, guid: str) -> Optional[Paper]:
+    async def get_paper_by_guid(self, guid: str) -> Paper | None:
         """Get a paper by its GUID.
 
         Args:
@@ -42,7 +42,7 @@ class PaperStorage(Protocol):
         """
         ...
 
-    async def get_paper_by_arxiv_id(self, arxiv_id: str) -> Optional[Paper]:
+    async def get_paper_by_arxiv_id(self, arxiv_id: str) -> Paper | None:
         """Get a paper by its arXiv ID.
 
         Args:
@@ -57,7 +57,7 @@ class PaperStorage(Protocol):
         self,
         start_date: datetime,
         end_date: datetime,
-    ) -> List[Paper]:
+    ) -> list[Paper]:
         """Get papers within a date range.
 
         Args:
@@ -69,7 +69,26 @@ class PaperStorage(Protocol):
         """
         ...
 
-    async def get_pending_papers(self) -> List[Paper]:
+    async def count_papers_by_date(
+        self,
+        start_date: datetime,
+        end_date: datetime,
+    ) -> int:
+        """Count papers within a date range.
+
+        Args:
+            start_date: Start of the date range.
+            end_date: End of the date range.
+
+        Returns:
+            Number of papers published within the range.
+
+        Reason: Enables efficient pagination by getting total count
+        without loading all paper objects.
+        """
+        ...
+
+    async def get_pending_papers(self) -> list[Paper]:
         """Get papers that haven't been notified yet.
 
         Returns:

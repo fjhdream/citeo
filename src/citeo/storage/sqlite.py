@@ -6,7 +6,6 @@ Provides async SQLite storage with deduplication and status tracking.
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
 
 import aiosqlite
 
@@ -81,25 +80,21 @@ class SQLitePaperStorage:
             await db.commit()
             return cursor.rowcount > 0
 
-    async def get_paper_by_guid(self, guid: str) -> Optional[Paper]:
+    async def get_paper_by_guid(self, guid: str) -> Paper | None:
         """Get paper by GUID."""
         async with aiosqlite.connect(self._db_path) as db:
             db.row_factory = aiosqlite.Row
-            async with db.execute(
-                "SELECT * FROM papers WHERE guid = ?", (guid,)
-            ) as cursor:
+            async with db.execute("SELECT * FROM papers WHERE guid = ?", (guid,)) as cursor:
                 row = await cursor.fetchone()
                 if row:
                     return self._row_to_paper(row)
                 return None
 
-    async def get_paper_by_arxiv_id(self, arxiv_id: str) -> Optional[Paper]:
+    async def get_paper_by_arxiv_id(self, arxiv_id: str) -> Paper | None:
         """Get paper by arXiv ID."""
         async with aiosqlite.connect(self._db_path) as db:
             db.row_factory = aiosqlite.Row
-            async with db.execute(
-                "SELECT * FROM papers WHERE arxiv_id = ?", (arxiv_id,)
-            ) as cursor:
+            async with db.execute("SELECT * FROM papers WHERE arxiv_id = ?", (arxiv_id,)) as cursor:
                 row = await cursor.fetchone()
                 if row:
                     return self._row_to_paper(row)
@@ -109,7 +104,7 @@ class SQLitePaperStorage:
         self,
         start_date: datetime,
         end_date: datetime,
-    ) -> List[Paper]:
+    ) -> list[Paper]:
         """Get papers within date range."""
         async with aiosqlite.connect(self._db_path) as db:
             db.row_factory = aiosqlite.Row
@@ -124,7 +119,27 @@ class SQLitePaperStorage:
                 rows = await cursor.fetchall()
                 return [self._row_to_paper(row) for row in rows]
 
-    async def get_pending_papers(self) -> List[Paper]:
+    async def count_papers_by_date(
+        self,
+        start_date: datetime,
+        end_date: datetime,
+    ) -> int:
+        """Count papers within date range.
+
+        Reason: Efficient count query for pagination without loading all papers.
+        """
+        async with aiosqlite.connect(self._db_path) as db:
+            async with db.execute(
+                """
+                SELECT COUNT(*) FROM papers
+                WHERE published_at >= ? AND published_at <= ?
+                """,
+                (start_date.isoformat(), end_date.isoformat()),
+            ) as cursor:
+                row = await cursor.fetchone()
+                return row[0] if row else 0
+
+    async def get_pending_papers(self) -> list[Paper]:
         """Get papers waiting for notification."""
         async with aiosqlite.connect(self._db_path) as db:
             db.row_factory = aiosqlite.Row

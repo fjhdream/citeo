@@ -8,7 +8,7 @@ import structlog
 from citeo.ai.pdf_analyzer import analyze_pdf
 from citeo.exceptions import AIProcessingError, PDFDownloadError
 from citeo.models.paper import Paper
-from citeo.storage.sqlite import SQLitePaperStorage
+from citeo.storage.base import PaperStorage
 
 logger = structlog.get_logger()
 
@@ -19,7 +19,7 @@ class PDFService:
     Handles API-triggered deep analysis of paper PDFs.
     """
 
-    def __init__(self, storage: SQLitePaperStorage):
+    def __init__(self, storage: PaperStorage):
         """Initialize PDF service.
 
         Args:

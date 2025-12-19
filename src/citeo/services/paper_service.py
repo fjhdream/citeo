@@ -13,7 +13,7 @@ from citeo.models.paper import Paper
 from citeo.notifiers.telegram import TelegramNotifier
 from citeo.parsers.arxiv_parser import ArxivParser
 from citeo.sources.arxiv import ArxivFeedSource
-from citeo.storage.sqlite import SQLitePaperStorage
+from citeo.storage.base import PaperStorage
 
 logger = structlog.get_logger()
 
@@ -29,7 +29,7 @@ class PaperService:
         self,
         sources: List[ArxivFeedSource],
         parser: ArxivParser,
-        storage: SQLitePaperStorage,
+        storage: PaperStorage,
         notifier: TelegramNotifier,
         enable_translation: bool = True,
     ):

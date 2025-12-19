@@ -6,7 +6,7 @@ Defines agents for paper summarization and translation using OpenAI Agents SDK.
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 
-from agents import Agent, set_default_openai_client
+from agents import Agent, set_default_openai_client, set_tracing_disabled
 
 # Import settings and configure OpenAI client
 # Reason: Must be done at module load time before agents are created
@@ -18,6 +18,20 @@ _client = AsyncOpenAI(
     timeout=settings.openai_timeout,
 )
 set_default_openai_client(_client)
+
+# Configure tracing
+# Reason: Tracing requires a valid OpenAI API key. When using custom base URL,
+# tracing needs a separate key or should be disabled to avoid 401 errors.
+if not settings.openai_tracing_enabled:
+    set_tracing_disabled(True)
+elif settings.openai_tracing_api_key:
+    # Reason: Use separate tracing client with official OpenAI endpoint
+    from agents import set_tracing_export_api_key
+    set_tracing_export_api_key(settings.openai_tracing_api_key.get_secret_value())
+elif settings.openai_base_url:
+    # Reason: Using custom base URL without tracing key will cause 401 errors
+    # Auto-disable tracing to prevent errors
+    set_tracing_disabled(True)
 
 
 class SummaryOutput(BaseModel):
