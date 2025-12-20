@@ -292,8 +292,30 @@ def get_url_generator() -> SignedURLGenerator:
                 "Required for generating analysis links in notifications."
             )
 
-        # Create nonce storage
-        nonce_storage = NonceStorage(str(settings.db_path))
+        # Create nonce storage based on database type
+        # Reason: Support both SQLite and D1 for nonce tracking
+        if settings.db_type == "d1":
+            # D1 database - import D1NonceStorage
+            try:
+                from citeo.auth.signed_url_d1 import D1NonceStorage
+
+                nonce_storage = D1NonceStorage(
+                    account_id=settings.d1_account_id,
+                    database_id=settings.d1_database_id,
+                    api_token=settings.d1_api_token.get_secret_value()
+                    if settings.d1_api_token
+                    else None,
+                )
+                logger.info("Using D1 nonce storage for signed URLs")
+            except ImportError:
+                logger.warning(
+                    "D1NonceStorage not available, signed URLs may not work correctly with D1"
+                )
+                nonce_storage = None
+        else:
+            # SQLite database
+            nonce_storage = NonceStorage(str(settings.db_path))
+            logger.info("Using SQLite nonce storage for signed URLs")
 
         _url_generator = SignedURLGenerator(
             secret=settings.signed_url_secret.get_secret_value(),
