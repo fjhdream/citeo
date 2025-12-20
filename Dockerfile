@@ -14,8 +14,9 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 
 # Install dependencies in system Python
-# Reason: --system flag installs directly without virtual environment in container
-RUN uv sync --frozen --no-dev --system
+# Reason: UV_SYSTEM_PYTHON=1 installs directly without virtual environment in container
+ENV UV_SYSTEM_PYTHON=1
+RUN uv sync --frozen --no-dev
 
 # Stage 2: Runtime stage with minimal footprint
 FROM python:3.11-slim
