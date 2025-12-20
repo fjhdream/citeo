@@ -191,28 +191,36 @@ class TelegramNotifier:
                     arxiv_id=paper.arxiv_id, platform="telegram"
                 )
                 parts.append(
-                    f"🔗 <a href='{paper.abs_url}'>Abstract</a> | "
-                    f"<a href='{paper.pdf_url}'>PDF</a> | "
-                    f"<a href='{analysis_url}'>深度分析</a>"
+                    f"🔗 <a href='{self._escape_url(paper.abs_url)}'>Abstract</a> | "
+                    f"<a href='{self._escape_url(paper.pdf_url)}'>PDF</a> | "
+                    f"<a href='{self._escape_url(analysis_url)}'>深度分析</a>"
                 )
             except Exception as e:
                 # Fallback if URL generation fails
                 logger.warning("Failed to generate analysis URL", error=str(e))
                 parts.append(
-                    f"🔗 <a href='{paper.abs_url}'>Abstract</a> | "
-                    f"<a href='{paper.pdf_url}'>PDF</a>"
+                    f"🔗 <a href='{self._escape_url(paper.abs_url)}'>Abstract</a> | "
+                    f"<a href='{self._escape_url(paper.pdf_url)}'>PDF</a>"
                 )
         else:
             # Original format without analysis link
             parts.append(
-                f"🔗 <a href='{paper.abs_url}'>Abstract</a> | " f"<a href='{paper.pdf_url}'>PDF</a>"
+                f"🔗 <a href='{self._escape_url(paper.abs_url)}'>Abstract</a> | "
+                f"<a href='{self._escape_url(paper.pdf_url)}'>PDF</a>"
             )
 
         return "\n".join(parts)
 
     def _escape_html(self, text: str) -> str:
-        """Escape HTML special characters."""
+        """Escape HTML special characters for text content."""
         return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    def _escape_url(self, url: str) -> str:
+        """Escape URL for use in HTML attributes.
+
+        Reason: URLs in HTML href attributes need & escaped as &amp;
+        """
+        return url.replace("&", "&amp;")
 
     def _get_score_emoji(self, score: float) -> str:
         """Get emoji based on programmer recommendation score (1-10).
@@ -295,7 +303,8 @@ class TelegramNotifier:
         # Links
         parts.append("")
         parts.append(
-            f"🔗 <a href='{paper.abs_url}'>Abstract</a> | " f"<a href='{paper.pdf_url}'>PDF</a>"
+            f"🔗 <a href='{self._escape_url(paper.abs_url)}'>Abstract</a> | "
+            f"<a href='{self._escape_url(paper.pdf_url)}'>PDF</a>"
         )
 
         message = "\n".join(parts)

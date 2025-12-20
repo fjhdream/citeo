@@ -2,9 +2,15 @@ version: '3.8'
 
 services:
   citeo:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    # Use pre-built image from GitHub Container Registry
+    # Reason: Faster deployment, no local build required
+    image: ghcr.io/carota/citeo:latest
+
+    # Alternative: Build locally (comment out 'image' and uncomment below)
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+
     container_name: citeo-app
     restart: unless-stopped
 

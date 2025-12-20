@@ -1,5 +1,8 @@
 # Citeo
 
+[![Docker Build](https://github.com/carota/citeo/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/carota/citeo/actions/workflows/docker-publish.yml)
+[![Docker Image](https://ghcr-badge.deta.dev/carota/citeo/latest_tag?trim=major&label=latest)](https://github.com/carota/citeo/pkgs/container/citeo)
+
 arXiv RSS订阅 + AI摘要翻译 + 多渠道推送系统
 
 ## 功能特性
@@ -16,9 +19,11 @@ arXiv RSS订阅 + AI摘要翻译 + 多渠道推送系统
 
 ### 方式一：Docker Compose 部署（推荐）
 
+使用预构建的 Docker 镜像快速部署：
+
 ```bash
 # 1. 克隆项目
-git clone https://github.com/yourusername/citeo.git
+git clone https://github.com/carota/citeo.git
 cd citeo
 
 # 2. 配置环境变量
@@ -26,9 +31,11 @@ cp .env.example .env
 # 编辑 .env 填入必要配置：
 # - OPENAI_API_KEY（必填）
 # - TELEGRAM_BOT_TOKEN 和 TELEGRAM_CHAT_ID（如使用Telegram）
-# - FEISHU_WEBHOOK_URL（如使用飞书）
+# - API_BASE_URL（推荐，用于深度分析链接）
+# - SIGNED_URL_SECRET（推荐，32+字符随机字符串）
 
-# 3. 启动服务
+# 3. 拉取最新镜像并启动
+docker-compose pull
 docker-compose up -d
 
 # 4. 查看日志
@@ -39,6 +46,8 @@ docker-compose down
 ```
 
 访问 `http://localhost:8000/api/health` 检查服务状态。
+
+**📖 详细的 Docker 部署文档：** [docs/DOCKER_DEPLOYMENT.md](docs/DOCKER_DEPLOYMENT.md)
 
 ### 方式二：本地开发
 

@@ -95,6 +95,15 @@ def get_storage() -> PaperStorage:
     return _storage
 
 
+def get_notifier() -> Notifier | None:
+    """Get notifier instance.
+
+    Returns:
+        Notifier instance or None if not configured.
+    """
+    return _notifier
+
+
 # Helper functions for date handling
 
 
@@ -249,6 +258,16 @@ class PaperListResponse(BaseModel):
     papers: list[PaperListItemResponse] = Field(..., description="List of papers")
     query_date: str | None = Field(None, description="Query date (single date mode)")
     query_range: dict | None = Field(None, description="Query range (range mode)")
+
+
+class ResendResponse(BaseModel):
+    """Paper resend notification response."""
+
+    status: str = Field(..., description="Operation status (success/error)")
+    arxiv_id: str = Field(..., description="arXiv paper ID")
+    title: str = Field(..., description="Paper title")
+    notified_channels: int = Field(..., description="Number of notification channels notified")
+    message: str = Field(..., description="Human-readable status message")
 
 
 # Background task storage
@@ -698,4 +717,116 @@ async def get_paper(arxiv_id: str, user: AuthUser = Depends(require_auth)) -> Pa
         pdf_url=paper.pdf_url,
         has_summary=paper.summary is not None,
         has_deep_analysis=(paper.summary is not None and paper.summary.deep_analysis is not None),
+    )
+
+
+def _count_notifier_channels(notifier: Notifier) -> int:
+    """Count number of active notification channels.
+
+    Reason: Provides visibility into how many channels received the notification.
+    """
+    from citeo.notifiers.multi import MultiNotifier
+
+    if isinstance(notifier, MultiNotifier):
+        return len(notifier._notifiers)
+    return 1
+
+
+@router.post("/papers/{arxiv_id}/resend", response_model=ResendResponse)
+async def resend_paper(
+    arxiv_id: str,
+    force: bool = Query(False, description="Ignore relevance score threshold"),
+    user: AuthUser = Depends(require_auth),
+) -> ResendResponse:
+    """Resend paper summary notification to all configured channels.
+
+    Sends the paper's AI-generated summary to all configured notification
+    channels (Telegram, Feishu, etc.) even if it was already sent before.
+
+    Args:
+        arxiv_id: arXiv paper ID (e.g., "2512.14709")
+        force: If True, ignore MIN_NOTIFICATION_SCORE threshold
+        user: Authenticated user
+
+    Returns:
+        ResendResponse with status and notification details
+
+    Raises:
+        HTTPException 404: Paper not found
+        HTTPException 400: Paper has no summary or score too low
+        HTTPException 503: Notification channels not configured
+        HTTPException 500: Failed to send notification
+    """
+    log = logger.bind(arxiv_id=arxiv_id, force=force, user=user.user_id)
+    log.info("Resend paper notification requested")
+
+    # 1. Get paper from storage
+    storage = get_storage()
+    paper = await storage.get_paper_by_arxiv_id(arxiv_id)
+
+    if not paper:
+        log.warning("Paper not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Paper with arXiv ID {arxiv_id} not found",
+        )
+
+    # 2. Validate paper has AI summary
+    if not paper.summary:
+        log.warning("Paper has no AI summary")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Paper {arxiv_id} has no AI summary. "
+            f"Use POST /api/papers/{arxiv_id}/analyze to generate summary first.",
+        )
+
+    # 3. Check relevance score (unless force=True)
+    notifier = get_notifier()
+    if not notifier:
+        log.error("Notification channels not configured")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Notification channels not configured. "
+            "Set NOTIFIER_TYPES, TELEGRAM_BOT_TOKEN, etc. in environment.",
+        )
+
+    if not force:
+        # Get settings to check min_notification_score
+        from citeo.config.settings import settings
+
+        min_score = settings.min_notification_score
+        if paper.summary.relevance_score < min_score:
+            log.warning(
+                "Paper score below threshold",
+                score=paper.summary.relevance_score,
+                threshold=min_score,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Paper relevance score {paper.summary.relevance_score:.1f} "
+                f"is below threshold {min_score:.1f}. "
+                f"Use force=true to override.",
+            )
+
+    # 4. Send notification
+    success = await notifier.send_paper(paper)
+
+    if not success:
+        log.error("Failed to send notification")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to send notification to one or more channels",
+        )
+
+    # 5. Count notification channels
+    notified_channels = _count_notifier_channels(notifier)
+
+    log.info("Paper notification resent successfully", channels=notified_channels)
+
+    return ResendResponse(
+        status="success",
+        arxiv_id=paper.arxiv_id,
+        title=paper.title,
+        notified_channels=notified_channels,
+        message="Paper resent successfully",
     )
