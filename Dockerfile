@@ -11,12 +11,13 @@ WORKDIR /app
 
 # Copy dependency files first for better layer caching
 # Reason: Dependencies change less frequently than source code
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock README.md ./
 
-# Install dependencies in system Python
-# Reason: UV_SYSTEM_PYTHON=1 installs directly without virtual environment in container
-ENV UV_SYSTEM_PYTHON=1
-RUN uv sync --frozen --no-dev
+# Export dependencies and install to system Python
+# Reason: Export lock file to requirements.txt format, then install with pip
+RUN uv export --no-dev --no-hashes -o requirements.txt && \
+    uv pip install --system --no-cache -r requirements.txt && \
+    rm requirements.txt
 
 # Stage 2: Runtime stage with minimal footprint
 FROM python:3.11-slim
@@ -48,6 +49,10 @@ COPY --chown=citeo:citeo pyproject.toml ./
 
 # Switch to non-root user
 USER citeo
+
+# Set PYTHONPATH to include src directory
+# Reason: citeo package is in src/ directory
+ENV PYTHONPATH=/app/src:$PYTHONPATH
 
 # Expose API port
 EXPOSE 8000
