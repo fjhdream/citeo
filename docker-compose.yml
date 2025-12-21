@@ -16,8 +16,13 @@ services:
     env_file:
       - .env
 
-    # Alternatively, specify environment variables directly:
+    # Reason: Set timezone for correct scheduled task execution
+    environment:
+      - TZ=Asia/Shanghai
+
+    # Alternatively, specify all environment variables directly:
     # environment:
+    #   TZ: Asia/Shanghai
     #   OPENAI_API_KEY: ${OPENAI_API_KEY}
     #   TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
     #   TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
@@ -45,15 +50,21 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2'
+          cpus: "2"
           memory: 2G
         reservations:
-          cpus: '0.5'
+          cpus: "0.5"
           memory: 512M
 
     # Health check
     healthcheck:
-      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health', timeout=5)"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import httpx; httpx.get('http://localhost:8000/health', timeout=5)",
+        ]
       interval: 30s
       timeout: 10s
       retries: 3
