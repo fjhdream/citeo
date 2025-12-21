@@ -3,16 +3,25 @@
 Provides REST API endpoints for PDF analysis and paper queries.
 """
 
+import re
 from datetime import datetime, timedelta
+from pathlib import Path
 
+import markdown
 import structlog
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
 from citeo.auth.dependencies import require_auth
 from citeo.auth.exceptions import RateLimitExceededError
 from citeo.auth.models import AuthUser
-from citeo.auth.rate_limiter import get_analyze_rate_limiter
+from citeo.auth.rate_limiter import (
+    InMemoryRateLimiter,
+    RateLimitConfig,
+    get_analyze_rate_limiter,
+)
 from citeo.auth.signed_url import get_url_generator
 from citeo.config.settings import Settings
 from citeo.notifiers.base import Notifier
@@ -23,6 +32,11 @@ from citeo.storage import PaperStorage, create_storage
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/api", tags=["papers"])
+
+# Initialize Jinja2 templates
+# Reason: Template-based rendering for public web views of deep analysis
+_templates_dir = Path(__file__).parent / "templates"
+templates = Jinja2Templates(directory=str(_templates_dir))
 
 # Service instances (will be initialized on app startup)
 _storage: PaperStorage | None = None
@@ -829,4 +843,120 @@ async def resend_paper(
         title=paper.title,
         notified_channels=notified_channels,
         message="Paper resent successfully",
+    )
+
+
+# Web view rate limiter
+# Reason: Protect public view endpoint from DoS attacks
+_view_rate_limiter = InMemoryRateLimiter(
+    RateLimitConfig(
+        requests=100,  # 100 views per window
+        window_seconds=60,  # 1 minute window
+    )
+)
+
+
+def _validate_arxiv_id(arxiv_id: str) -> bool:
+    """Validate arXiv ID format to prevent injection attacks.
+
+    Reason: Input validation for public endpoint without authentication.
+    """
+    # arXiv ID format: YYMM.NNNNN or YYMM.NNNNNN or archive/YYMMNNN
+    pattern = r"^(\d{4}\.\d{4,5}|[a-z\-]+/\d{7})$"
+    return bool(re.match(pattern, arxiv_id, re.IGNORECASE))
+
+
+@router.get(
+    "/view/{arxiv_id}",
+    response_class=HTMLResponse,
+    tags=["web-view"],
+    summary="View deep analysis in browser",
+    description="Returns a beautifully formatted HTML page of the deep analysis report. "
+    "Public access, no authentication required. Link can be shared and bookmarked.",
+    responses={
+        200: {
+            "description": "HTML page with formatted analysis",
+            "content": {"text/html": {"example": "<!DOCTYPE html>..."}},
+        },
+        400: {"description": "Invalid arXiv ID format"},
+        404: {"description": "Paper not found or analysis not available"},
+        429: {"description": "Rate limit exceeded (100 requests/minute per IP)"},
+    },
+)
+async def view_analysis(arxiv_id: str, request: Request) -> HTMLResponse:
+    """View deep analysis in web page (public access, no authentication required).
+
+    Provides a beautifully formatted web view of the deep analysis report.
+    The link is publicly accessible and can be shared or bookmarked.
+
+    Args:
+        arxiv_id: arXiv paper ID (e.g., "2512.14709")
+        request: FastAPI request object (required by Jinja2Templates)
+
+    Returns:
+        HTMLResponse with rendered analysis page
+
+    Raises:
+        HTTPException 429: Rate limit exceeded
+        HTTPException 400: Invalid arXiv ID format
+        HTTPException 404: Paper not found or analysis not available
+    """
+    # 1. Rate limit by IP address
+    # Reason: Prevent DoS attacks on public endpoint
+    client_ip = request.client.host if request.client else "unknown"
+
+    try:
+        _view_rate_limiter.check_rate_limit(client_ip)
+    except RateLimitExceededError as e:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Too many requests. Please try again in {e.retry_after} seconds.",
+            headers={"Retry-After": str(e.retry_after)},
+        )
+
+    # 2. Validate arXiv ID format
+    # Reason: Prevent path traversal and injection attacks
+    if not _validate_arxiv_id(arxiv_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid arXiv ID format: {arxiv_id}",
+        )
+
+    # 3. Fetch paper from storage
+    storage = get_storage()
+    paper = await storage.get_paper_by_arxiv_id(arxiv_id)
+
+    if not paper:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Paper with arXiv ID {arxiv_id} not found",
+        )
+
+    # 4. Check if deep analysis exists
+    if not paper.summary or not paper.summary.deep_analysis:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Deep analysis not available for paper {arxiv_id}. "
+            "Please trigger analysis first.",
+        )
+
+    # 5. Convert Markdown to HTML
+    # Reason: Deep analysis is stored in Markdown format, need HTML for web view
+    analysis_html = markdown.markdown(
+        paper.summary.deep_analysis,
+        extensions=[
+            "fenced_code",  # ```code blocks```
+            "tables",  # | table | support |
+            "nl2br",  # Convert \n to <br>
+        ],
+    )
+
+    # 6. Render template
+    return templates.TemplateResponse(
+        "analysis_view.html",
+        {
+            "request": request,
+            "paper": paper,
+            "analysis_html": analysis_html,
+        },
     )

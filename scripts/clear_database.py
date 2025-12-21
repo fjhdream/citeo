@@ -41,6 +41,7 @@ async def clear_database():
     # Execute DELETE statement
     if settings.db_type == "sqlite":
         import aiosqlite
+
         async with aiosqlite.connect(settings.db_path) as db:
             await db.execute("DELETE FROM papers")
             await db.commit()
@@ -49,9 +50,10 @@ async def clear_database():
             print(f"✅ Database cleared. Remaining papers: {count}")
     elif settings.db_type == "d1":
         from citeo.storage.d1 import D1PaperStorage
+
         if isinstance(storage, D1PaperStorage):
             result = await storage._execute("DELETE FROM papers")
-            print(f"✅ Database cleared")
+            print("✅ Database cleared")
 
             # Verify
             count_result = await storage._execute("SELECT COUNT(*) as count FROM papers")

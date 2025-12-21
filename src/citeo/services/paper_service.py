@@ -4,7 +4,6 @@ Coordinates RSS fetching, AI processing, storage, and notifications.
 """
 
 import asyncio
-from typing import List
 
 import structlog
 
@@ -28,7 +27,7 @@ class PaperService:
 
     def __init__(
         self,
-        sources: List[ArxivFeedSource],
+        sources: list[ArxivFeedSource],
         parser: ArxivParser,
         storage: PaperStorage,
         notifier: TelegramNotifier,
@@ -78,7 +77,7 @@ class PaperService:
             "errors": [],
         }
 
-        all_papers: List[Paper] = []
+        all_papers: list[Paper] = []
 
         # Step 1: Fetch and parse from all sources
         for source in self._sources:
@@ -125,12 +124,12 @@ class PaperService:
 
         return stats
 
-    async def _fetch_and_parse(self, source: ArxivFeedSource) -> List[Paper]:
+    async def _fetch_and_parse(self, source: ArxivFeedSource) -> list[Paper]:
         """Fetch and parse a single feed source."""
         raw_content = await source.fetch_raw()
         return self._parser.parse(raw_content, source.source_id)
 
-    async def _save_new_papers(self, papers: List[Paper]) -> List[Paper]:
+    async def _save_new_papers(self, papers: list[Paper]) -> list[Paper]:
         """Save papers, returning only new ones (deduplication)."""
         new_papers = []
         for paper in papers:
@@ -139,7 +138,7 @@ class PaperService:
                 new_papers.append(paper)
         return new_papers
 
-    async def _process_with_ai(self, papers: List[Paper]) -> List[Paper]:
+    async def _process_with_ai(self, papers: list[Paper]) -> list[Paper]:
         """Process papers with AI summarization/translation.
 
         Reason: Use asyncio.gather with Semaphore for parallel processing to speed up
@@ -176,7 +175,7 @@ class PaperService:
 
         return list(processed)
 
-    async def _notify(self, papers: List[Paper]) -> int:
+    async def _notify(self, papers: list[Paper]) -> int:
         """Send notifications for papers with score >= threshold.
 
         Reason: Filter papers by recommendation score to only notify about
@@ -186,26 +185,23 @@ class PaperService:
         # Filter papers with score >= threshold (only those with AI summary)
         # Reason: Only recommend papers that are highly relevant to programmers
         high_score_papers = [
-            p for p in papers
+            p
+            for p in papers
             if p.summary and p.summary.relevance_score >= self._min_notification_score
         ]
 
         # Sort by relevance score (descending)
         # Reason: Show most important papers first
         high_score_papers.sort(
-            key=lambda p: p.summary.relevance_score if p.summary else 0,
-            reverse=True
+            key=lambda p: p.summary.relevance_score if p.summary else 0, reverse=True
         )
 
         log = logger.bind(
             total_papers=len(papers),
             high_score_papers=len(high_score_papers),
-            min_score=self._min_notification_score
+            min_score=self._min_notification_score,
         )
-        log.info(
-            "Filtering papers for notification",
-            filtered_count=len(high_score_papers)
-        )
+        log.info("Filtering papers for notification", filtered_count=len(high_score_papers))
 
         if not high_score_papers:
             log.info(
@@ -239,7 +235,7 @@ class PaperService:
 
         stats = {"papers_fetched": 0, "papers_new": 0}
 
-        all_papers: List[Paper] = []
+        all_papers: list[Paper] = []
         for source in self._sources:
             try:
                 papers = await self._fetch_and_parse(source)

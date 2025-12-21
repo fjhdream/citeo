@@ -3,9 +3,9 @@
 Provides daily scheduled tasks for RSS fetching and processing.
 """
 
+import structlog
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-import structlog
 
 from citeo.services.paper_service import PaperService
 

@@ -22,12 +22,12 @@ async def test_d1_real():
     print("=" * 70)
 
     # Check configuration
-    print(f"\n📊 Current Configuration:")
+    print("\n📊 Current Configuration:")
     print(f"  DB_TYPE: {settings.db_type}")
 
     if settings.db_type.lower() != "d1":
         print(f"\n⚠️  Warning: DB_TYPE is '{settings.db_type}', not 'd1'")
-        print(f"   This test requires D1 configuration.")
+        print("   This test requires D1 configuration.")
         return False
 
     print(f"  D1_ACCOUNT_ID: {settings.d1_account_id}")
@@ -35,7 +35,7 @@ async def test_d1_real():
     print(f"  D1_API_TOKEN: {'*' * 20} (hidden)")
 
     # Create storage
-    print(f"\n🔧 Creating D1 storage instance...")
+    print("\n🔧 Creating D1 storage instance...")
     try:
         storage = create_storage(settings)
         print(f"✅ Storage created: {type(storage).__name__}")
@@ -44,7 +44,7 @@ async def test_d1_real():
         return False
 
     # Test 1: Initialize database schema
-    print(f"\n" + "=" * 70)
+    print("\n" + "=" * 70)
     print("Test 1: Initialize Database Schema")
     print("=" * 70)
     try:
@@ -53,11 +53,12 @@ async def test_d1_real():
     except Exception as e:
         print(f"❌ Schema initialization failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
     # Test 2: Save a test paper
-    print(f"\n" + "=" * 70)
+    print("\n" + "=" * 70)
     print("Test 2: Save Test Paper")
     print("=" * 70)
 
@@ -78,60 +79,63 @@ async def test_d1_real():
     try:
         is_new = await storage.save_paper(test_paper)
         if is_new:
-            print(f"✅ Test paper saved successfully (new record)")
+            print("✅ Test paper saved successfully (new record)")
         else:
-            print(f"✅ Paper already exists (deduplication working)")
+            print("✅ Paper already exists (deduplication working)")
     except Exception as e:
         print(f"❌ Failed to save paper: {e}")
         import traceback
+
         traceback.print_exc()
         await storage.close()
         return False
 
     # Test 3: Get paper by GUID
-    print(f"\n" + "=" * 70)
+    print("\n" + "=" * 70)
     print("Test 3: Get Paper by GUID")
     print("=" * 70)
     try:
         retrieved = await storage.get_paper_by_guid(test_paper.guid)
         if retrieved:
-            print(f"✅ Paper retrieved successfully")
+            print("✅ Paper retrieved successfully")
             print(f"   Title: {retrieved.title}")
             print(f"   arXiv ID: {retrieved.arxiv_id}")
             print(f"   Authors: {len(retrieved.authors)} authors")
         else:
-            print(f"❌ Paper not found by GUID")
+            print("❌ Paper not found by GUID")
             await storage.close()
             return False
     except Exception as e:
         print(f"❌ Failed to get paper by GUID: {e}")
         import traceback
+
         traceback.print_exc()
         await storage.close()
         return False
 
     # Test 4: Get paper by arXiv ID
-    print(f"\n" + "=" * 70)
+    print("\n" + "=" * 70)
     print("Test 4: Get Paper by arXiv ID")
     print("=" * 70)
     try:
         retrieved = await storage.get_paper_by_arxiv_id(test_paper.arxiv_id)
         if retrieved:
-            print(f"✅ Paper retrieved by arXiv ID successfully")
+            print("✅ Paper retrieved by arXiv ID successfully")
             print(f"   Title: {retrieved.title}")
         else:
-            print(f"❌ Paper not found by arXiv ID")
+            print("❌ Paper not found by arXiv ID")
             await storage.close()
             return False
     except Exception as e:
         print(f"❌ Failed to get paper by arXiv ID: {e}")
         import traceback
+
         traceback.print_exc()
         await storage.close()
         return False
 
     # Test 5: Get pending papers
-    print(f"\n" + "=" * 70)
+    print("\n" + "=" * 70)
     print("Test 5: Get Pending Papers")
     print("=" * 70)
     try:
@@ -142,33 +146,35 @@ async def test_d1_real():
     except Exception as e:
         print(f"❌ Failed to get pending papers: {e}")
         import traceback
+
         traceback.print_exc()
         await storage.close()
         return False
 
     # Test 6: Mark as notified
-    print(f"\n" + "=" * 70)
+    print("\n" + "=" * 70)
     print("Test 6: Mark Paper as Notified")
     print("=" * 70)
     try:
         await storage.mark_as_notified(test_paper.guid)
-        print(f"✅ Paper marked as notified")
+        print("✅ Paper marked as notified")
 
         # Verify
         retrieved = await storage.get_paper_by_guid(test_paper.guid)
         if retrieved and retrieved.is_notified:
-            print(f"✅ Verified: is_notified = True")
+            print("✅ Verified: is_notified = True")
         else:
-            print(f"⚠️  Warning: is_notified status not updated")
+            print("⚠️  Warning: is_notified status not updated")
     except Exception as e:
         print(f"❌ Failed to mark as notified: {e}")
         import traceback
+
         traceback.print_exc()
         await storage.close()
         return False
 
     # Test 7: Update summary
-    print(f"\n" + "=" * 70)
+    print("\n" + "=" * 70)
     print("Test 7: Update Paper Summary")
     print("=" * 70)
     try:
@@ -182,26 +188,27 @@ async def test_d1_real():
         )
 
         await storage.update_summary(test_paper.guid, test_summary)
-        print(f"✅ Summary updated successfully")
+        print("✅ Summary updated successfully")
 
         # Verify
         retrieved = await storage.get_paper_by_guid(test_paper.guid)
         if retrieved and retrieved.summary:
-            print(f"✅ Verified: Summary exists")
+            print("✅ Verified: Summary exists")
             print(f"   Title (ZH): {retrieved.summary.title_zh}")
             print(f"   Relevance: {retrieved.summary.relevance_score}")
             print(f"   Key Points: {len(retrieved.summary.key_points)}")
         else:
-            print(f"⚠️  Warning: Summary not found")
+            print("⚠️  Warning: Summary not found")
     except Exception as e:
         print(f"❌ Failed to update summary: {e}")
         import traceback
+
         traceback.print_exc()
         await storage.close()
         return False
 
     # Test 8: Get papers by date
-    print(f"\n" + "=" * 70)
+    print("\n" + "=" * 70)
     print("Test 8: Get Papers by Date Range")
     print("=" * 70)
     try:
@@ -215,30 +222,31 @@ async def test_d1_real():
     except Exception as e:
         print(f"❌ Failed to get papers by date: {e}")
         import traceback
+
         traceback.print_exc()
         await storage.close()
         return False
 
     # Cleanup
-    print(f"\n" + "=" * 70)
+    print("\n" + "=" * 70)
     print("Cleanup")
     print("=" * 70)
     await storage.close()
-    print(f"✅ Storage connection closed")
+    print("✅ Storage connection closed")
 
     # Summary
-    print(f"\n" + "=" * 70)
+    print("\n" + "=" * 70)
     print("✅ All D1 Integration Tests Passed!")
     print("=" * 70)
-    print(f"\nD1 Database is working correctly:")
-    print(f"  ✅ Schema initialization")
-    print(f"  ✅ Save paper (with deduplication)")
-    print(f"  ✅ Get paper by GUID")
-    print(f"  ✅ Get paper by arXiv ID")
-    print(f"  ✅ Get pending papers")
-    print(f"  ✅ Mark as notified")
-    print(f"  ✅ Update summary")
-    print(f"  ✅ Get papers by date range")
+    print("\nD1 Database is working correctly:")
+    print("  ✅ Schema initialization")
+    print("  ✅ Save paper (with deduplication)")
+    print("  ✅ Get paper by GUID")
+    print("  ✅ Get paper by arXiv ID")
+    print("  ✅ Get pending papers")
+    print("  ✅ Mark as notified")
+    print("  ✅ Update summary")
+    print("  ✅ Get papers by date range")
 
     return True
 

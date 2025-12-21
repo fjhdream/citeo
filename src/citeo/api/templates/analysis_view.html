@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ paper.summary.title_zh or paper.title }} - 深度分析</title>
+    <style>
+        /* Modern, clean design inspired by Medium/Notion */
+        :root {
+            --primary: #2563eb;
+            --text: #1f2937;
+            --text-light: #6b7280;
+            --bg: #ffffff;
+            --bg-alt: #f9fafb;
+            --border: #e5e7eb;
+            --code-bg: #f3f4f6;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --primary: #60a5fa;
+                --text: #f9fafb;
+                --text-light: #d1d5db;
+                --bg: #111827;
+                --bg-alt: #1f2937;
+                --border: #374151;
+                --code-bg: #1f2937;
+            }
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI',
+                         'Noto Sans SC', 'PingFang SC', 'Hiragino Sans GB',
+                         'Microsoft YaHei', sans-serif;
+            line-height: 1.7;
+            color: var(--text);
+            background: var(--bg);
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem 1rem;
+        }
+
+        .header {
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            line-height: 1.3;
+        }
+
+        .original-title {
+            font-style: italic;
+            color: var(--text-light);
+            font-size: 1.1rem;
+            margin-bottom: 1rem;
+        }
+
+        .meta {
+            color: var(--text-light);
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .meta-item {
+            display: inline-block;
+            margin-right: 1rem;
+        }
+
+        .arxiv-id {
+            font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
+            background: var(--code-bg);
+            padding: 0.2em 0.5em;
+            border-radius: 3px;
+            font-size: 0.85rem;
+        }
+
+        .analysis {
+            font-size: 1.05rem;
+            line-height: 1.8;
+        }
+
+        .analysis h2 {
+            font-size: 1.5rem;
+            margin-top: 2.5rem;
+            margin-bottom: 1rem;
+            color: var(--primary);
+            font-weight: 700;
+        }
+
+        .analysis h3 {
+            font-size: 1.25rem;
+            margin-top: 2rem;
+            margin-bottom: 0.75rem;
+            font-weight: 600;
+        }
+
+        .analysis h4 {
+            font-size: 1.1rem;
+            margin-top: 1.5rem;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+
+        .analysis p {
+            margin-bottom: 1rem;
+        }
+
+        .analysis ul,
+        .analysis ol {
+            margin-bottom: 1rem;
+            padding-left: 2rem;
+        }
+
+        .analysis li {
+            margin-bottom: 0.5rem;
+        }
+
+        .analysis blockquote {
+            border-left: 4px solid var(--primary);
+            padding-left: 1rem;
+            margin: 1.5rem 0;
+            color: var(--text-light);
+            font-style: italic;
+        }
+
+        .analysis strong {
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .analysis em {
+            font-style: italic;
+        }
+
+        .analysis code {
+            background: var(--code-bg);
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-size: 0.9em;
+            font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
+        }
+
+        .analysis pre {
+            background: var(--bg-alt);
+            padding: 1rem;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+            margin-bottom: 1rem;
+            border: 1px solid var(--border);
+        }
+
+        .analysis pre code {
+            background: none;
+            padding: 0;
+        }
+
+        .analysis table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 1rem;
+        }
+
+        .analysis th,
+        .analysis td {
+            border: 1px solid var(--border);
+            padding: 0.5rem;
+            text-align: left;
+        }
+
+        .analysis th {
+            background: var(--bg-alt);
+            font-weight: 600;
+        }
+
+        .analysis hr {
+            border: none;
+            border-top: 1px solid var(--border);
+            margin: 2rem 0;
+        }
+
+        .links {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 0.95rem;
+            transition: all 0.2s;
+            text-align: center;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: var(--bg-alt);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border);
+            transform: translateY(-1px);
+        }
+
+        .footer {
+            margin-top: 3rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--border);
+            color: var(--text-light);
+            font-size: 0.85rem;
+            text-align: center;
+        }
+
+        /* Mobile responsive */
+        @media (max-width: 640px) {
+            body {
+                padding: 1rem 0.75rem;
+            }
+
+            h1 {
+                font-size: 1.5rem;
+            }
+
+            .original-title {
+                font-size: 1rem;
+            }
+
+            .analysis {
+                font-size: 1rem;
+            }
+
+            .analysis h2 {
+                font-size: 1.25rem;
+            }
+
+            .analysis h3 {
+                font-size: 1.1rem;
+            }
+
+            .links {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>{{ paper.summary.title_zh or paper.title }}</h1>
+        {% if paper.summary and paper.summary.title_zh %}
+        <p class="original-title">{{ paper.title }}</p>
+        {% endif %}
+        <div class="meta">
+            <div class="meta-item">
+                <span class="arxiv-id">arXiv:{{ paper.arxiv_id }}</span>
+            </div>
+            {% if paper.authors %}
+            <div class="meta-item">
+                👤 {{ paper.authors[:3]|join(', ') }}{% if paper.authors|length > 3 %} et al.{% endif %}
+            </div>
+            {% endif %}
+            {% if paper.published_at %}
+            <div class="meta-item">
+                📅 {{ paper.published_at.strftime('%Y-%m-%d') }}
+            </div>
+            {% endif %}
+            {% if paper.categories %}
+            <div class="meta-item">
+                🏷️ {{ paper.categories[:3]|join(', ') }}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="analysis">
+        {{ analysis_html|safe }}
+    </div>
+
+    <div class="links">
+        <a href="{{ paper.abs_url }}" class="btn btn-primary" target="_blank" rel="noopener">
+            📄 arXiv Abstract
+        </a>
+        <a href="{{ paper.pdf_url }}" class="btn btn-secondary" target="_blank" rel="noopener">
+            📥 Download PDF
+        </a>
+    </div>
+
+    <div class="footer">
+        <p>Generated by Citeo - arXiv RSS subscription with AI summarization</p>
+    </div>
+</body>
+</html>

@@ -177,9 +177,7 @@ class InMemoryTokenStorage:
         """Remove expired tokens from storage."""
         now = datetime.utcnow()
         expired_ids = [
-            token_id
-            for token_id, record in self._tokens.items()
-            if now > record.expires_at
+            token_id for token_id, record in self._tokens.items() if now > record.expires_at
         ]
 
         for token_id in expired_ids:

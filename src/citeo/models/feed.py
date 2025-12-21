@@ -1,7 +1,5 @@
 """Feed configuration models."""
 
-from typing import List
-
 from pydantic import BaseModel, Field, HttpUrl
 
 
@@ -15,11 +13,11 @@ class FeedConfig(BaseModel):
     enabled: bool = Field(default=True)
 
     # Filter configuration
-    include_categories: List[str] = Field(
+    include_categories: list[str] = Field(
         default_factory=list,
         description="Categories to include (empty means all)",
     )
-    exclude_announce_types: List[str] = Field(
+    exclude_announce_types: list[str] = Field(
         default_factory=lambda: ["replace"],
         description="Announcement types to exclude",
     )
@@ -32,8 +30,8 @@ class FeedConfig(BaseModel):
 class FeedCollection(BaseModel):
     """Collection of feed configurations."""
 
-    feeds: List[FeedConfig] = Field(default_factory=list)
+    feeds: list[FeedConfig] = Field(default_factory=list)
 
-    def get_enabled_feeds(self) -> List[FeedConfig]:
+    def get_enabled_feeds(self) -> list[FeedConfig]:
         """Return only enabled feeds."""
         return [f for f in self.feeds if f.enabled]

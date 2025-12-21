@@ -28,7 +28,9 @@ def test_sqlite_storage():
 
     try:
         storage = create_storage(settings)
-        assert isinstance(storage, SQLitePaperStorage), f"Expected SQLitePaperStorage, got {type(storage)}"
+        assert isinstance(
+            storage, SQLitePaperStorage
+        ), f"Expected SQLitePaperStorage, got {type(storage)}"
         print("✅ SQLite storage created successfully")
         print(f"   Type: {type(storage).__name__}")
         return True

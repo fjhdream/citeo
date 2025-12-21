@@ -5,7 +5,6 @@ by changing configuration only.
 """
 
 import asyncio
-import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -56,25 +55,26 @@ async def test_database_switch():
         print(f"✅ Created storage: {type(sqlite_storage).__name__}")
 
         await sqlite_storage.initialize()
-        print(f"✅ SQLite initialized")
+        print("✅ SQLite initialized")
 
         is_new = await sqlite_storage.save_paper(test_paper)
         print(f"✅ Saved paper to SQLite (new={is_new})")
 
         retrieved = await sqlite_storage.get_paper_by_guid(test_paper.guid)
         if retrieved:
-            print(f"✅ Retrieved paper from SQLite")
+            print("✅ Retrieved paper from SQLite")
             print(f"   Title: {retrieved.title}")
         else:
-            print(f"❌ Failed to retrieve paper from SQLite")
+            print("❌ Failed to retrieve paper from SQLite")
             return False
 
         await sqlite_storage.close()
-        print(f"✅ SQLite storage closed")
+        print("✅ SQLite storage closed")
 
     except Exception as e:
         print(f"❌ SQLite test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -93,11 +93,13 @@ async def test_database_switch():
             print("   Skipping D1 test (SQLite test passed)")
             return True
 
-        if not all([
-            current_settings.d1_account_id,
-            current_settings.d1_database_id,
-            current_settings.d1_api_token,
-        ]):
+        if not all(
+            [
+                current_settings.d1_account_id,
+                current_settings.d1_database_id,
+                current_settings.d1_api_token,
+            ]
+        ):
             print("⚠️  D1 credentials not configured")
             print("   Skipping D1 test (SQLite test passed)")
             return True
@@ -119,7 +121,7 @@ async def test_database_switch():
         print(f"✅ Created storage: {type(d1_storage).__name__}")
 
         await d1_storage.initialize()
-        print(f"✅ D1 initialized")
+        print("✅ D1 initialized")
 
         # Save to D1
         is_new = await d1_storage.save_paper(test_paper)
@@ -128,19 +130,20 @@ async def test_database_switch():
         # Retrieve from D1
         retrieved = await d1_storage.get_paper_by_guid(test_paper.guid)
         if retrieved:
-            print(f"✅ Retrieved paper from D1")
+            print("✅ Retrieved paper from D1")
             print(f"   Title: {retrieved.title}")
         else:
-            print(f"❌ Failed to retrieve paper from D1")
+            print("❌ Failed to retrieve paper from D1")
             await d1_storage.close()
             return False
 
         await d1_storage.close()
-        print(f"✅ D1 storage closed")
+        print("✅ D1 storage closed")
 
     except Exception as e:
         print(f"❌ D1 test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -156,17 +159,18 @@ async def test_database_switch():
         # Should still be able to read the previously saved paper
         retrieved = await sqlite_storage2.get_paper_by_guid(test_paper.guid)
         if retrieved:
-            print(f"✅ Retrieved paper from SQLite (after switch)")
-            print(f"   Data persisted correctly")
+            print("✅ Retrieved paper from SQLite (after switch)")
+            print("   Data persisted correctly")
         else:
-            print(f"⚠️  Paper not found (expected if database was recreated)")
+            print("⚠️  Paper not found (expected if database was recreated)")
 
         await sqlite_storage2.close()
-        print(f"✅ SQLite storage closed")
+        print("✅ SQLite storage closed")
 
     except Exception as e:
         print(f"❌ Switch back test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 

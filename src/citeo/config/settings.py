@@ -180,6 +180,17 @@ class Settings(BaseSettings):
         description="Rate limit window in seconds",
     )
 
+    # Web View (for public analysis viewing)
+    enable_web_view: bool = Field(
+        default=True,
+        description="Enable public web view for deep analysis reports",
+    )
+    web_view_rate_limit: int = Field(
+        default=100,
+        ge=1,
+        description="Max view requests per IP per minute",
+    )
+
 
 # Global singleton instance
 # Reason: Settings are loaded once and shared across the application

@@ -2,7 +2,6 @@
 
 import re
 from datetime import datetime
-from typing import List
 
 import feedparser
 
@@ -17,7 +16,7 @@ class ArxivParser:
     extraction of arXiv ID, abstract, and metadata.
     """
 
-    def parse(self, raw_content: str, source_id: str) -> List[Paper]:
+    def parse(self, raw_content: str, source_id: str) -> list[Paper]:
         """Parse arXiv RSS content into Paper objects.
 
         Args:
@@ -37,7 +36,7 @@ class ArxivParser:
                 # feedparser sets bozo=1 for any parse issues
                 raise ParseError(source_id, f"Feed parse error: {feed.bozo_exception}")
 
-            papers: List[Paper] = []
+            papers: list[Paper] = []
             for entry in feed.entries:
                 paper = self._parse_entry(entry, source_id)
                 if paper:
@@ -160,8 +159,7 @@ class ArxivParser:
                 ":" in line[:30]
                 and len(line) < 100
                 and any(
-                    kw in line.lower()
-                    for kw in ["arxiv:", "comments:", "subjects:", "report-no:"]
+                    kw in line.lower() for kw in ["arxiv:", "comments:", "subjects:", "report-no:"]
                 )
             ):
                 continue
@@ -171,7 +169,7 @@ class ArxivParser:
 
         return self._clean_text(" ".join(abstract_lines))
 
-    def _extract_authors(self, entry: feedparser.FeedParserDict) -> List[str]:
+    def _extract_authors(self, entry: feedparser.FeedParserDict) -> list[str]:
         """Extract author names from entry."""
         authors = []
 
@@ -194,7 +192,7 @@ class ArxivParser:
 
         return authors
 
-    def _parse_author_string(self, author_str: str) -> List[str]:
+    def _parse_author_string(self, author_str: str) -> list[str]:
         """Parse author string into list of names."""
         # Remove HTML tags
         author_str = re.sub(r"<[^>]+>", "", author_str)
@@ -203,7 +201,7 @@ class ArxivParser:
         parts = re.split(r",\s*|\s+and\s+", author_str)
         return [name.strip() for name in parts if name.strip()]
 
-    def _extract_categories(self, entry: feedparser.FeedParserDict) -> List[str]:
+    def _extract_categories(self, entry: feedparser.FeedParserDict) -> list[str]:
         """Extract categories/tags from entry."""
         categories = []
 
@@ -225,9 +223,7 @@ class ArxivParser:
 
         return categories
 
-    def _extract_announce_type(
-        self, entry: feedparser.FeedParserDict, description: str
-    ) -> str:
+    def _extract_announce_type(self, entry: feedparser.FeedParserDict, description: str) -> str:
         """Extract announcement type (new, cross, replace)."""
         # Check arxiv:announce_type if available
         if hasattr(entry, "arxiv_announce_type"):

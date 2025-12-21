@@ -10,13 +10,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-import httpx
-from pydantic import SecretStr
 
-from citeo.api.routes import init_services, router
-from citeo.config.settings import Settings
+from citeo.api.routes import init_services
 from citeo.models.paper import Paper
-from citeo.storage import create_storage
 
 
 async def test_api():
@@ -32,17 +28,18 @@ async def test_api():
         print(f"❌ Failed to load settings: {e}")
         return False
 
-    print(f"\n📊 Configuration:")
+    print("\n📊 Configuration:")
     print(f"  DB_TYPE: {settings.db_type}")
 
     # Initialize services
-    print(f"\n🔧 Initializing API services...")
+    print("\n🔧 Initializing API services...")
     try:
         init_services(settings)
-        print(f"✅ Services initialized")
+        print("✅ Services initialized")
     except Exception as e:
         print(f"❌ Failed to initialize services: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -51,7 +48,7 @@ async def test_api():
 
     storage = get_storage()
     await storage.initialize()
-    print(f"✅ Storage initialized")
+    print("✅ Storage initialized")
 
     # Create test paper
     test_paper = Paper(
@@ -68,7 +65,7 @@ async def test_api():
         fetched_at=datetime.utcnow(),
     )
 
-    print(f"\n📄 Creating test paper...")
+    print("\n📄 Creating test paper...")
     try:
         is_new = await storage.save_paper(test_paper)
         print(f"✅ Test paper saved (new={is_new})")
@@ -79,7 +76,7 @@ async def test_api():
         return False
 
     # Start testing endpoints
-    print(f"\n" + "=" * 70)
+    print("\n" + "=" * 70)
     print("Testing API Endpoints")
     print("=" * 70)
 
@@ -87,7 +84,7 @@ async def test_api():
     # This is more reliable for integration tests
 
     # Test 1: Health Check
-    print(f"\n" + "-" * 70)
+    print("\n" + "-" * 70)
     print("Test 1: Health Check Endpoint")
     print("-" * 70)
     try:
@@ -95,7 +92,7 @@ async def test_api():
 
         response = await health_check()
         if response.status == "ok":
-            print(f"✅ Health check passed")
+            print("✅ Health check passed")
             print(f"   Status: {response.status}")
             print(f"   Version: {response.version}")
         else:
@@ -104,11 +101,12 @@ async def test_api():
     except Exception as e:
         print(f"❌ Health check failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
     # Test 2: Get Paper by arXiv ID
-    print(f"\n" + "-" * 70)
+    print("\n" + "-" * 70)
     print("Test 2: GET /api/papers/{arxiv_id}")
     print("-" * 70)
     try:
@@ -116,23 +114,24 @@ async def test_api():
 
         paper_response = await get_paper(test_paper.arxiv_id)
         if paper_response.arxiv_id == test_paper.arxiv_id:
-            print(f"✅ Get paper endpoint passed")
+            print("✅ Get paper endpoint passed")
             print(f"   arXiv ID: {paper_response.arxiv_id}")
             print(f"   Title: {paper_response.title}")
             print(f"   Authors: {len(paper_response.authors)} authors")
             print(f"   Has Summary: {paper_response.has_summary}")
             print(f"   Has Deep Analysis: {paper_response.has_deep_analysis}")
         else:
-            print(f"❌ Get paper failed: wrong paper returned")
+            print("❌ Get paper failed: wrong paper returned")
             return False
     except Exception as e:
         print(f"❌ Get paper failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
     # Test 3: Get Analysis (should not exist yet)
-    print(f"\n" + "-" * 70)
+    print("\n" + "-" * 70)
     print("Test 3: GET /api/papers/{arxiv_id}/analysis")
     print("-" * 70)
     try:
@@ -140,20 +139,21 @@ async def test_api():
 
         analysis_response = await get_analysis(test_paper.arxiv_id)
         if analysis_response.status == "not_available":
-            print(f"✅ Get analysis endpoint passed")
+            print("✅ Get analysis endpoint passed")
             print(f"   Status: {analysis_response.status} (expected)")
             print(f"   Analysis: {analysis_response.analysis}")
         else:
             print(f"⚠️  Unexpected status: {analysis_response.status}")
-            print(f"   This is okay if analysis already exists")
+            print("   This is okay if analysis already exists")
     except Exception as e:
         print(f"❌ Get analysis failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
     # Test 4: Test nonexistent paper (404 handling)
-    print(f"\n" + "-" * 70)
+    print("\n" + "-" * 70)
     print("Test 4: Error Handling (404)")
     print("-" * 70)
     try:
@@ -163,11 +163,11 @@ async def test_api():
 
         try:
             await get_paper("9999.99999")
-            print(f"❌ Error handling failed: should have raised HTTPException")
+            print("❌ Error handling failed: should have raised HTTPException")
             return False
         except HTTPException as e:
             if e.status_code == 404:
-                print(f"✅ 404 error handling passed")
+                print("✅ 404 error handling passed")
                 print(f"   Status: {e.status_code}")
                 print(f"   Detail: {e.detail}")
             else:
@@ -176,11 +176,12 @@ async def test_api():
     except Exception as e:
         print(f"❌ Error handling test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
     # Test 5: Service Dependencies
-    print(f"\n" + "-" * 70)
+    print("\n" + "-" * 70)
     print("Test 5: Service Dependencies")
     print("-" * 70)
     try:
@@ -190,20 +191,21 @@ async def test_api():
         pdf_service_instance = get_pdf_service()
 
         if storage_instance is not None and pdf_service_instance is not None:
-            print(f"✅ Service dependencies working")
+            print("✅ Service dependencies working")
             print(f"   Storage: {type(storage_instance).__name__}")
             print(f"   PDF Service: {type(pdf_service_instance).__name__}")
         else:
-            print(f"❌ Service dependencies failed: services are None")
+            print("❌ Service dependencies failed: services are None")
             return False
     except Exception as e:
         print(f"❌ Service dependencies test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
     # Test 6: Factory Pattern Integration
-    print(f"\n" + "-" * 70)
+    print("\n" + "-" * 70)
     print("Test 6: Factory Pattern Integration")
     print("-" * 70)
     try:
@@ -227,16 +229,16 @@ async def test_api():
         )
 
         if all_methods_present:
-            print(f"✅ Factory pattern working correctly")
-            print(f"   Storage implements all PaperStorage Protocol methods")
+            print("✅ Factory pattern working correctly")
+            print("   Storage implements all PaperStorage Protocol methods")
             print(f"   Concrete type: {type(storage_instance).__name__}")
 
             # Verify storage operations work
             test_retrieve = await storage_instance.get_paper_by_arxiv_id(test_paper.arxiv_id)
             if test_retrieve and test_retrieve.arxiv_id == test_paper.arxiv_id:
-                print(f"✅ Storage operations working through Protocol")
+                print("✅ Storage operations working through Protocol")
             else:
-                print(f"❌ Storage operations failed")
+                print("❌ Storage operations failed")
                 return False
         else:
             missing = [m for m in required_methods if not hasattr(storage_instance, m)]
@@ -245,27 +247,28 @@ async def test_api():
     except Exception as e:
         print(f"❌ Factory pattern test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
     # Cleanup
-    print(f"\n" + "=" * 70)
+    print("\n" + "=" * 70)
     print("Cleanup")
     print("=" * 70)
     await storage.close()
-    print(f"✅ Storage connection closed")
+    print("✅ Storage connection closed")
 
     # Summary
-    print(f"\n" + "=" * 70)
+    print("\n" + "=" * 70)
     print("✅ All API Tests Passed!")
     print("=" * 70)
-    print(f"\nValidated Endpoints:")
-    print(f"  ✅ GET /api/health - Health check")
-    print(f"  ✅ GET /api/papers/{{arxiv_id}} - Get paper info")
-    print(f"  ✅ GET /api/papers/{{arxiv_id}}/analysis - Get analysis status")
-    print(f"  ✅ Error handling (404 responses)")
-    print(f"  ✅ Service initialization and dependencies")
-    print(f"  ✅ Factory pattern integration")
+    print("\nValidated Endpoints:")
+    print("  ✅ GET /api/health - Health check")
+    print("  ✅ GET /api/papers/{arxiv_id} - Get paper info")
+    print("  ✅ GET /api/papers/{arxiv_id}/analysis - Get analysis status")
+    print("  ✅ Error handling (404 responses)")
+    print("  ✅ Service initialization and dependencies")
+    print("  ✅ Factory pattern integration")
     print(f"\n💡 All API endpoints working correctly with {settings.db_type.upper()} database!")
 
     return True

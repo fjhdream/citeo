@@ -1,6 +1,6 @@
 """Abstract feed parser interface using Protocol."""
 
-from typing import List, Protocol
+from typing import Protocol
 
 from citeo.models.paper import Paper
 
@@ -8,7 +8,7 @@ from citeo.models.paper import Paper
 class FeedParser(Protocol):
     """RSS feed parser abstraction protocol."""
 
-    def parse(self, raw_content: str, source_id: str) -> List[Paper]:
+    def parse(self, raw_content: str, source_id: str) -> list[Paper]:
         """Parse RSS content into Paper objects.
 
         Args:

@@ -376,6 +376,12 @@ class FeishuNotifier:
 
         # Action buttons
         elements.append({"tag": "hr"})
+
+        # Reason: Add web view button for viewing formatted analysis in browser
+        from citeo.config.settings import settings
+
+        view_url = f"{settings.api_base_url}/api/view/{paper.arxiv_id}"
+
         elements.append(
             {
                 "tag": "action",
@@ -391,6 +397,12 @@ class FeishuNotifier:
                         "text": {"tag": "plain_text", "content": "📥 PDF"},
                         "type": "default",
                         "url": paper.pdf_url,
+                    },
+                    {
+                        "tag": "button",
+                        "text": {"tag": "plain_text", "content": "🌐 完整查看"},
+                        "type": "default",
+                        "url": view_url,
                     },
                 ],
             }

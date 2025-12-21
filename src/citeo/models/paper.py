@@ -1,7 +1,6 @@
 """Paper data models for arXiv papers and AI-generated summaries."""
 
 from datetime import datetime
-from typing import List, Optional
 
 from pydantic import BaseModel, Field, computed_field
 
@@ -14,7 +13,7 @@ class PaperSummary(BaseModel):
 
     title_zh: str = Field(..., description="Chinese translated title")
     abstract_zh: str = Field(..., description="Chinese translated abstract")
-    key_points: List[str] = Field(
+    key_points: list[str] = Field(
         default_factory=list,
         description="Key points in Chinese (3-5 items)",
     )
@@ -27,7 +26,7 @@ class PaperSummary(BaseModel):
     generated_at: datetime = Field(default_factory=datetime.utcnow)
 
     # Optional: PDF deep analysis result
-    deep_analysis: Optional[str] = Field(default=None)
+    deep_analysis: str | None = Field(default=None)
 
 
 class Paper(BaseModel):
@@ -41,8 +40,8 @@ class Paper(BaseModel):
     arxiv_id: str = Field(..., description="arXiv ID, e.g., 2512.14709")
     title: str = Field(..., description="Paper title")
     abstract: str = Field(..., description="Paper abstract")
-    authors: List[str] = Field(default_factory=list, description="Author list")
-    categories: List[str] = Field(default_factory=list, description="Category list")
+    authors: list[str] = Field(default_factory=list, description="Author list")
+    categories: list[str] = Field(default_factory=list, description="Category list")
     announce_type: str = Field(default="new", description="Announcement type: new/cross/replace")
     published_at: datetime = Field(..., description="Publication time")
 
@@ -54,11 +53,11 @@ class Paper(BaseModel):
     fetched_at: datetime = Field(default_factory=datetime.utcnow)
 
     # AI processing result (optional, populated after processing)
-    summary: Optional[PaperSummary] = Field(default=None)
+    summary: PaperSummary | None = Field(default=None)
 
     # Status flags
     is_notified: bool = Field(default=False, description="Whether notification was sent")
-    notified_at: Optional[datetime] = Field(default=None)
+    notified_at: datetime | None = Field(default=None)
 
     @computed_field
     @property

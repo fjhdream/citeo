@@ -6,9 +6,9 @@ Handles the complete token lifecycle:
 3. Fallback to API key if refresh token expires
 """
 
-import httpx
 from datetime import datetime, timedelta
-from typing import Optional
+
+import httpx
 
 
 class CiteoClient:
@@ -23,9 +23,9 @@ class CiteoClient:
         """
         self.base_url = base_url
         self.api_key = api_key
-        self.access_token: Optional[str] = None
-        self.refresh_token: Optional[str] = None
-        self.token_expires_at: Optional[datetime] = None
+        self.access_token: str | None = None
+        self.refresh_token: str | None = None
+        self.token_expires_at: datetime | None = None
 
     def _is_token_expired(self) -> bool:
         """Check if access token has expired or will expire soon.
@@ -145,7 +145,7 @@ class CiteoClient:
         response.raise_for_status()
         return response.json()
 
-    def get_papers_by_date(self, date: Optional[str] = None, limit: int = 20) -> dict:
+    def get_papers_by_date(self, date: str | None = None, limit: int = 20) -> dict:
         """Get papers by date.
 
         Args:
@@ -197,6 +197,7 @@ class CiteoClient:
 
 
 # ============= Usage Examples =============
+
 
 def example_basic_usage():
     """Example: Basic API usage with automatic token management."""

@@ -302,9 +302,15 @@ class TelegramNotifier:
 
         # Links
         parts.append("")
+
+        # Reason: Add web view link for viewing formatted analysis in browser
+        from citeo.config.settings import settings
+
+        view_url = f"{settings.api_base_url}/api/view/{paper.arxiv_id}"
         parts.append(
             f"🔗 <a href='{self._escape_url(paper.abs_url)}'>Abstract</a> | "
-            f"<a href='{self._escape_url(paper.pdf_url)}'>PDF</a>"
+            f"<a href='{self._escape_url(paper.pdf_url)}'>PDF</a> | "
+            f"<a href='{self._escape_url(view_url)}'>完整查看</a>"
         )
 
         message = "\n".join(parts)

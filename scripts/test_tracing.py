@@ -11,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from agents import Runner
+
 from citeo.ai.agents import summarizer_agent
 from citeo.config.settings import settings
 
@@ -23,32 +24,31 @@ async def test_tracing():
     print("=" * 60)
 
     # Check tracing status
-    print(f"\n📊 Tracing Configuration:")
+    print("\n📊 Tracing Configuration:")
     print(f"  - OPENAI_TRACING_ENABLED: {settings.openai_tracing_enabled}")
     print(f"  - OPENAI_TRACING_API_KEY: {'Set' if settings.openai_tracing_api_key else 'Not set'}")
     print(f"  - OPENAI_BASE_URL: {settings.openai_base_url or 'Default (api.openai.com)'}")
 
     # Determine expected behavior based on configuration
-    tracing_should_be_disabled = (
-        not settings.openai_tracing_enabled
-        or (settings.openai_base_url and not settings.openai_tracing_api_key)
+    tracing_should_be_disabled = not settings.openai_tracing_enabled or (
+        settings.openai_base_url and not settings.openai_tracing_api_key
     )
 
     if tracing_should_be_disabled:
-        print(f"\n⚠️  Tracing is DISABLED")
+        print("\n⚠️  Tracing is DISABLED")
         if not settings.openai_tracing_enabled:
             print("   Reason: OPENAI_TRACING_ENABLED=false in config")
         elif settings.openai_base_url and not settings.openai_tracing_api_key:
             print("   Reason: Using custom base URL without separate tracing key")
     else:
-        print(f"\n✅ Tracing is ENABLED")
+        print("\n✅ Tracing is ENABLED")
         if settings.openai_tracing_api_key:
             print("   Using separate API key for tracing")
         else:
             print("   Using main API key for tracing")
 
     # Run a test agent call
-    print(f"\n🧪 Running test agent call...")
+    print("\n🧪 Running test agent call...")
 
     test_input = """
     Title: Attention Is All You Need
@@ -61,24 +61,27 @@ async def test_tracing():
     try:
         result = await Runner.run(summarizer_agent, test_input)
 
-        print(f"\n✅ Agent call successful!")
-        print(f"\nResult:")
+        print("\n✅ Agent call successful!")
+        print("\nResult:")
         print(f"  Title (ZH): {result.final_output.title_zh}")
         print(f"  Relevance: {result.final_output.relevance_score}")
 
         # Check for tracing info in result
-        if hasattr(result, 'trace_id') and result.trace_id:
+        if hasattr(result, "trace_id") and result.trace_id:
             print(f"\n🔍 Trace ID found: {result.trace_id}")
             print(f"   View trace at: https://platform.openai.com/traces/{result.trace_id}")
-        elif hasattr(result, 'trace_url') and result.trace_url:
+        elif hasattr(result, "trace_url") and result.trace_url:
             print(f"\n🔍 Trace URL: {result.trace_url}")
         else:
-            print(f"\n📝 No trace info in result (tracing may be disabled or not available)")
-            print(f"   Result attributes: {[attr for attr in dir(result) if not attr.startswith('_')]}")
+            print("\n📝 No trace info in result (tracing may be disabled or not available)")
+            print(
+                f"   Result attributes: {[attr for attr in dir(result) if not attr.startswith('_')]}"
+            )
 
     except Exception as e:
         print(f"\n❌ Agent call failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 

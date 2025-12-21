@@ -3,8 +3,6 @@
 Provides configured HTTP client with sensible defaults.
 """
 
-from typing import Optional
-
 import httpx
 
 
@@ -33,7 +31,7 @@ def create_http_client(
 async def fetch_url(
     url: str,
     timeout: int = 30,
-    headers: Optional[dict] = None,
+    headers: dict | None = None,
 ) -> str:
     """Fetch content from URL.
 
