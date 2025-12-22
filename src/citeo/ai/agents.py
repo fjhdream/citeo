@@ -74,6 +74,31 @@ class PDFAnalysisOutput(BaseModel):
     )
 
 
+class SelectionOutput(BaseModel):
+    """Structured output for intelligent paper selection.
+
+    Used when multiple papers have similar high scores and need intelligent
+    selection based on diversity, novelty, and complementarity criteria.
+    """
+
+    selected_arxiv_ids: list[str] = Field(
+        ...,
+        description="List of selected arXiv IDs in priority order",
+        min_length=1,
+        max_length=20,
+    )
+    selection_reasoning: dict[str, str] = Field(
+        ...,
+        description="Map of arxiv_id to selection reasoning in Chinese",
+    )
+    diversity_score: float = Field(
+        ...,
+        ge=0.0,
+        le=10.0,
+        description="Overall diversity score of the selection (0-10)",
+    )
+
+
 # Paper Summarizer Agent
 # Reason: Using structured output ensures consistent JSON format for downstream processing
 summarizer_agent = Agent(
@@ -159,4 +184,61 @@ pdf_analyzer_agent = Agent(
 - 把复杂概念拆解成普通人能理解的小块，用"首先...然后...最后..."的逻辑链条
 """,
     output_type=PDFAnalysisOutput,
+)
+
+
+# Paper Selector Agent
+# Reason: When multiple papers have similar high scores, use intelligent selection
+# to ensure diversity, novelty, and complementarity instead of simple truncation
+selector_agent = Agent(
+    name="PaperSelector",
+    model=settings.openai_model,
+    instructions="""你是一个智能论文筛选助手，专门负责从多篇高分论文中挑选出最有价值的论文组合。
+
+当有超过10篇论文获得了相似的高评分时，你的任务是从中挑选出最优的10篇（或指定数量），确保推送给用户的论文组合具有：
+
+**1. 多样性（Diversity）**
+- 避免所有论文都集中在同一个细分领域
+- 优先选择覆盖不同研究方向的论文
+- 例如：如果有5篇都是关于LLM推理优化的，不要全选，而是选1-2篇代表性的，留出空间给其他主题
+
+**2. 新颖性（Novelty）**
+- 优先选择提出新方法、新架构的论文
+- 相比渐进式改进，更看重创新性突破
+- 优先选择实验性、探索性的研究，而非纯粹的性能优化
+
+**3. 互补性（Complementarity）**
+- 选择的论文之间应该相互补充，而非重复
+- 例如：选择一篇理论基础研究 + 一篇工程实践论文，比选两篇类似的理论论文更好
+- 平衡基础研究与应用研究的比例
+
+**4. 实用价值优先**
+- 在评分相同的情况下，优先选择有代码实现、开源项目的论文
+- 优先选择可以直接应用到实际开发的论文
+- 优先选择与主流技术栈（如Agent系统、LLM应用开发）相关的论文
+
+**5. 时效性与影响力平衡**
+- 在新发表的探索性研究和经典方法改进之间找平衡
+- 优先选择可能引领趋势的前沿研究
+
+**筛选步骤：**
+1. 分析所有候选论文的类别、主题、方法
+2. 识别重复或高度相似的论文簇
+3. 从每个论文簇中选择最具代表性的1-2篇
+4. 确保最终选择覆盖多个不同领域
+5. 为每篇选中的论文提供简短的选择理由（50字以内）
+6. 计算整体多样性得分（0-10分）
+
+**输出要求：**
+- selected_arxiv_ids: 按优先级排序的arXiv ID列表
+- selection_reasoning: 每篇论文的选择理由（用中文，简洁说明为什么选它）
+- diversity_score: 整体多样性评分（10分=完全覆盖不同领域，0分=全部集中在单一主题）
+
+**示例理由：**
+- "首个将XXX应用于YYY的研究，开创性强"
+- "提供开源实现，可直接用于生产环境"
+- "填补了ZZZ领域的空白，与其他选择互补"
+- "方法简单但效果显著，实用性高"
+""",
+    output_type=SelectionOutput,
 )

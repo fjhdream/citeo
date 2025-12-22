@@ -34,6 +34,7 @@ class PaperService:
         enable_translation: bool = True,
         max_concurrent_ai: int = 5,
         min_notification_score: float = 8.0,
+        max_daily_notifications: int | None = 10,
     ):
         """Initialize paper service.
 
@@ -45,6 +46,7 @@ class PaperService:
             enable_translation: Whether to enable AI translation.
             max_concurrent_ai: Maximum concurrent AI processing tasks.
             min_notification_score: Minimum score for notification (1-10).
+            max_daily_notifications: Maximum number of papers to notify per day (None = unlimited).
         """
         self._sources = sources
         self._parser = parser
@@ -53,6 +55,7 @@ class PaperService:
         self._enable_translation = enable_translation
         self._max_concurrent_ai = max_concurrent_ai
         self._min_notification_score = min_notification_score
+        self._max_daily_notifications = max_daily_notifications
 
     async def run_daily_pipeline(self) -> dict:
         """Execute the daily processing pipeline.
@@ -196,12 +199,60 @@ class PaperService:
             key=lambda p: p.summary.relevance_score if p.summary else 0, reverse=True
         )
 
+        # Apply daily notification limit with intelligent selection
+        # Reason: When there are many high-scoring papers, use AI agent to ensure
+        # diversity and complementarity instead of simple score-based truncation
+        total_high_score = len(high_score_papers)
+        if self._max_daily_notifications and len(high_score_papers) > self._max_daily_notifications:
+            # Use intelligent selection when AI is enabled
+            # Reason: Only use AI selection if enable_translation=True, since it requires
+            # the same OpenAI infrastructure. If AI is disabled, fall back to simple truncation.
+            if self._enable_translation:
+                try:
+                    from citeo.ai.selector import select_papers
+
+                    logger.info(
+                        "Using intelligent selection for paper filtering",
+                        total_papers=total_high_score,
+                        target_count=self._max_daily_notifications,
+                    )
+
+                    high_score_papers = await select_papers(
+                        high_score_papers,
+                        max_count=self._max_daily_notifications,
+                    )
+
+                except Exception as e:
+                    logger.warning(
+                        "Intelligent selection failed, using simple truncation",
+                        error=str(e),
+                    )
+                    # Fallback to simple truncation
+                    high_score_papers = high_score_papers[: self._max_daily_notifications]
+            else:
+                # Simple truncation when AI is disabled
+                high_score_papers = high_score_papers[: self._max_daily_notifications]
+
+            logger.info(
+                "Applied daily notification limit",
+                total_high_score=total_high_score,
+                limit=self._max_daily_notifications,
+                sending=len(high_score_papers),
+                truncated_count=total_high_score - len(high_score_papers),
+            )
+
         log = logger.bind(
             total_papers=len(papers),
-            high_score_papers=len(high_score_papers),
+            high_score_papers=total_high_score,
+            sending_papers=len(high_score_papers),
             min_score=self._min_notification_score,
+            max_limit=self._max_daily_notifications,
         )
-        log.info("Filtering papers for notification", filtered_count=len(high_score_papers))
+        log.info(
+            "Filtering papers for notification",
+            filtered_count=total_high_score,
+            sending_count=len(high_score_papers),
+        )
 
         if not high_score_papers:
             log.info(
@@ -213,7 +264,9 @@ class PaperService:
                 await self._storage.mark_as_notified(paper.guid)
             return 0
 
-        success_count = await self._notifier.send_papers(high_score_papers)
+        success_count = await self._notifier.send_papers(
+            high_score_papers, total_filtered_count=total_high_score
+        )
 
         # Mark all papers as notified (both sent and filtered)
         # Reason: Avoid reprocessing low-score papers in future runs

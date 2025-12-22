@@ -115,6 +115,11 @@ class Settings(BaseSettings):
         le=10.0,
         description="Minimum programmer recommendation score for notification (1-10)",
     )
+    max_daily_notifications: int | None = Field(
+        default=10,
+        ge=1,
+        description="Maximum number of papers to notify per day (None = unlimited)",
+    )
 
     # Feed URLs (simple config, can also use database for complex scenarios)
     feed_urls: list[str] = Field(

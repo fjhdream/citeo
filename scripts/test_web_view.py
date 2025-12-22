@@ -31,9 +31,7 @@ async def test_web_view():
     start_date = end_date - timedelta(days=7)
 
     papers = await storage.get_papers_by_date(start_date, end_date)
-    papers_with_analysis = [
-        p for p in papers if p.summary and p.summary.deep_analysis
-    ]
+    papers_with_analysis = [p for p in papers if p.summary and p.summary.deep_analysis]
 
     if papers_with_analysis:
         paper = papers_with_analysis[0]

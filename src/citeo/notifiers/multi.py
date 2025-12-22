@@ -51,11 +51,14 @@ class MultiNotifier:
 
         return success
 
-    async def send_papers(self, papers: list[Paper]) -> int:
+    async def send_papers(
+        self, papers: list[Paper], total_filtered_count: int | None = None
+    ) -> int:
         """Send notifications for multiple papers to all channels.
 
         Args:
             papers: List of papers to notify about.
+            total_filtered_count: Total number of high-score papers before truncation (for display).
 
         Returns:
             Number of papers successfully sent to at least one channel.
@@ -63,9 +66,12 @@ class MultiNotifier:
         if not self._notifiers or not papers:
             return 0
 
-        # Send to all notifiers in parallel
+        # Send to all notifiers in parallel, passing truncation info
         results = await asyncio.gather(
-            *[n.send_papers(papers) for n in self._notifiers],
+            *[
+                n.send_papers(papers, total_filtered_count=total_filtered_count)
+                for n in self._notifiers
+            ],
             return_exceptions=True,
         )
 

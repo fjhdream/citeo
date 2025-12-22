@@ -123,11 +123,14 @@ class FeishuNotifier:
             log.info("Feishu paper notification sent")
         return success
 
-    async def send_papers(self, papers: list[Paper]) -> int:
+    async def send_papers(
+        self, papers: list[Paper], total_filtered_count: int | None = None
+    ) -> int:
         """Send notifications for multiple papers.
 
         Args:
             papers: List of papers to notify about.
+            total_filtered_count: Total number of high-score papers before truncation (for display).
 
         Returns:
             Number of successfully sent notifications.
@@ -137,8 +140,20 @@ class FeishuNotifier:
         if not papers:
             return 0
 
-        # Send header message
-        await self.send_message(f"📚 **arXiv Daily Update**\n今日新论文: {len(papers)} 篇")
+        # Send header message with truncation info
+        # Reason: Show users how many papers were selected vs total high-score papers
+        if total_filtered_count and total_filtered_count > len(papers):
+            # Show truncation: "10/25 篇"
+            header_msg = (
+                f"📚 **arXiv Daily Update**\n"
+                f"今日新论文: {len(papers)}/{total_filtered_count} �� "
+                f"(已按评分筛选)"
+            )
+        else:
+            # No truncation: "10 篇"
+            header_msg = f"📚 **arXiv Daily Update**\n今日新论文: {len(papers)} 篇"
+
+        await self.send_message(header_msg)
 
         success_count = 0
         for paper in papers:

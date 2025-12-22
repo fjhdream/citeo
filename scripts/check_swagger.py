@@ -78,9 +78,9 @@ try:
     # Ask if user wants to open browser
     try:
         choice = input("\nOpen http://localhost:8000/docs now? [y/N]: ").strip().lower()
-        if choice == 'y':
+        if choice == "y":
             print("\n🌐 Opening browser...")
-            webbrowser.open('http://localhost:8000/docs')
+            webbrowser.open("http://localhost:8000/docs")
             print("   If the page doesn't load, start the server first: uv run citeo")
     except KeyboardInterrupt:
         print("\n\n👋 Cancelled")
