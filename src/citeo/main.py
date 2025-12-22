@@ -6,6 +6,7 @@ scheduler and optional API server.
 
 import argparse
 import asyncio
+import logging
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -26,6 +27,21 @@ from citeo.services.paper_service import PaperService
 from citeo.sources.arxiv import ArxivFeedSource
 from citeo.storage import create_storage
 from citeo.utils.logger import configure_logging, get_logger
+
+
+class HealthCheckFilter(logging.Filter):
+    """Filter out successful health check requests from access logs.
+
+    Reason: Health checks run every 30s, creating noise in logs.
+    Only log health check failures for debugging.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        # Filter out successful GET /api/health requests (200 OK)
+        message = record.getMessage()
+        if "/api/health" in message and "200 OK" in message:
+            return False
+        return True
 
 
 def _create_notifier():
@@ -210,6 +226,10 @@ def main():
         # Run once and exit
         asyncio.run(run_cli_once())
     else:
+        # Add health check filter to uvicorn access log
+        # Reason: Suppress noisy health check logs (every 30s)
+        logging.getLogger("uvicorn.access").addFilter(HealthCheckFilter())
+
         # Start API server with scheduler
         app = create_app()
         uvicorn.run(

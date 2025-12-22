@@ -1,7 +1,7 @@
 # Citeo
 
-[![Docker Build](https://github.com/carota/citeo/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/carota/citeo/actions/workflows/docker-publish.yml)
-[![Docker Image](https://ghcr-badge.deta.dev/carota/citeo/latest_tag?trim=major&label=latest)](https://github.com/carota/citeo/pkgs/container/citeo)
+[![Docker Build](https://github.com/fjhdream/citeo/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/fjhdream/citeo/actions/workflows/docker-publish.yml)
+[![Docker Image](https://ghcr-badge.deta.dev/fjhdream/citeo/latest_tag?trim=major&label=latest)](https://github.com/fjhdream/citeo/pkgs/container/citeo)
 
 arXiv RSS订阅 + AI摘要翻译 + 多渠道推送系统
 
@@ -23,7 +23,7 @@ arXiv RSS订阅 + AI摘要翻译 + 多渠道推送系统
 
 ```bash
 # 1. 克隆项目
-git clone https://github.com/carota/citeo.git
+git clone https://github.com/fjhdream/citeo.git
 cd citeo
 
 # 2. 配置环境变量

@@ -45,7 +45,7 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 # Copy application source code
 COPY --chown=citeo:citeo src/ ./src/
 COPY --chown=citeo:citeo scripts/ ./scripts/
-COPY --chown=citeo:citeo pyproject.toml ./
+COPY --chown=citeo:citeo pyproject.toml README.md ./
 
 # Switch to non-root user
 USER citeo
