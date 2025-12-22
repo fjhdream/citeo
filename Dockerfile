@@ -22,6 +22,14 @@ RUN uv export --no-dev --no-hashes -o requirements.txt && \
 # Stage 2: Runtime stage with minimal footprint
 FROM python:3.11-slim
 
+# Reason: OCI labels provide metadata for container registries
+LABEL org.opencontainers.image.title="Citeo" \
+      org.opencontainers.image.description="arXiv RSS订阅 + AI摘要翻译 + 多渠道推送系统" \
+      org.opencontainers.image.source="https://github.com/fjhdream/citeo" \
+      org.opencontainers.image.url="https://github.com/fjhdream/citeo" \
+      org.opencontainers.image.documentation="https://github.com/fjhdream/citeo#readme" \
+      org.opencontainers.image.licenses="MIT"
+
 # Install runtime dependencies for PDF processing
 # Reason: pymupdf requires additional system libraries
 RUN apt-get update && \
