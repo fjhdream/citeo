@@ -284,6 +284,23 @@ class ResendResponse(BaseModel):
     message: str = Field(..., description="Human-readable status message")
 
 
+class TriggerDailyTaskResponse(BaseModel):
+    """Response from manual daily task trigger."""
+
+    status: str = Field(
+        ...,
+        description="Status: fetched_and_notified, processed_and_notified, "
+        "re_notified, already_notified",
+    )
+    papers_total: int = Field(..., description="Total papers fetched today")
+    papers_fetched: int = Field(..., description="Newly fetched papers (if pipeline ran)")
+    papers_new: int = Field(..., description="New papers after dedup")
+    papers_processed: int = Field(..., description="Papers processed with AI")
+    papers_notified: int = Field(..., description="Papers actually notified")
+    message: str = Field(..., description="Human-readable message")
+    errors: list[str] = Field(default_factory=list, description="Error messages if any")
+
+
 # Background task storage
 _analysis_tasks: dict[str, str] = {}  # arxiv_id -> status
 
@@ -844,6 +861,88 @@ async def resend_paper(
         notified_channels=notified_channels,
         message="Paper resent successfully",
     )
+
+
+@router.post("/daily-task/trigger", response_model=TriggerDailyTaskResponse)
+async def trigger_daily_task(
+    request: Request,
+    force: bool = Query(False, description="Force re-notification of already sent papers"),
+    user: AuthUser = Depends(require_auth),
+) -> TriggerDailyTaskResponse:
+    """Manually trigger today's daily task.
+
+    Intelligently handles different scenarios:
+    - If no papers fetched today: Runs full pipeline (fetch + process + notify)
+    - If papers exist but some unnotified: Processes and notifies pending papers
+    - If all papers already notified:
+      - force=false: Returns status without re-sending
+      - force=true: Resets flags and re-sends notifications
+
+    Args:
+        request: FastAPI request object (to access app.state)
+        force: If True, re-notify papers already sent today
+        user: Authenticated user
+
+    Returns:
+        TriggerDailyTaskResponse with execution statistics
+
+    Raises:
+        HTTPException 503: Paper service not available
+        HTTPException 500: Task trigger failed
+
+    Reason: Provides manual control over daily pipeline execution,
+    useful for testing, recovery, or on-demand updates.
+    """
+    log = logger.bind(endpoint="trigger_daily_task", force=force, user=user.user_id)
+    log.info("Daily task trigger requested")
+
+    # Get paper service from app.state
+    # Reason: paper_service is stored in app.state during lifespan startup
+    paper_service = getattr(request.app.state, "paper_service", None)
+    if not paper_service:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Paper service not available. Ensure API started with scheduler.",
+        )
+
+    try:
+        stats = await paper_service.trigger_daily_task(force=force)
+
+        # Build human-readable message
+        # Reason: Provide clear feedback to user about what happened
+        status_messages = {
+            "fetched_and_notified": f"Fetched {stats['papers_fetched']} papers, "
+            f"notified {stats['papers_notified']} high-score papers",
+            "processed_and_notified": f"Processed {stats['papers_processed']} pending papers, "
+            f"notified {stats['papers_notified']} papers",
+            "re_notified": f"Re-sent {stats['papers_notified']} papers from today",
+            "already_notified": f"All {stats['papers_total']} papers already notified. "
+            f"Use force=true to re-send.",
+        }
+
+        message = status_messages.get(
+            stats["status"], f"Task completed with status: {stats['status']}"
+        )
+
+        log.info("Daily task completed", **stats)
+
+        return TriggerDailyTaskResponse(
+            status=stats["status"],
+            papers_total=stats["papers_total"],
+            papers_fetched=stats.get("papers_fetched", 0),
+            papers_new=stats.get("papers_new", 0),
+            papers_processed=stats["papers_processed"],
+            papers_notified=stats["papers_notified"],
+            message=message,
+            errors=stats.get("errors", []),
+        )
+
+    except Exception as e:
+        log.error("Daily task trigger failed", error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to trigger daily task: {str(e)}",
+        )
 
 
 # Web view rate limiter

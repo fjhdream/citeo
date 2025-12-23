@@ -4,6 +4,7 @@ Coordinates RSS fetching, AI processing, storage, and notifications.
 """
 
 import asyncio
+from datetime import timedelta
 
 import structlog
 
@@ -331,3 +332,110 @@ class PaperService:
         notified = await self._notify(pending)
 
         return {"papers_pending": len(pending), "papers_notified": notified}
+
+    async def trigger_daily_task(self, force: bool = False) -> dict:
+        """Manually trigger today's daily task.
+
+        Intelligently handles different scenarios:
+        - If no papers fetched today: Run full pipeline
+        - If papers exist but unnotified: Process and notify
+        - If all notified and force=True: Reset and re-notify
+        - If all notified and force=False: Return status only
+
+        Args:
+            force: If True, re-notify already notified papers.
+
+        Returns:
+            dict: Execution statistics with status.
+
+        Reason: Centralized logic for manual daily task triggering,
+        reusing existing pipeline components while adding smart detection.
+        """
+        from datetime import datetime
+
+        log = logger.bind(job="trigger_daily_task", force=force)
+        log.info("Manual daily task trigger requested")
+
+        # Get today's date range (UTC)
+        # Reason: All timestamps in database are UTC, so we use utcnow()
+        now_utc = datetime.utcnow()
+        start_today = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_today = start_today + timedelta(days=1)
+
+        # Check papers fetched today
+        today_papers = await self._storage.get_papers_by_fetched_date(start_today, end_today)
+
+        stats = {
+            "status": "",
+            "papers_total": len(today_papers),
+            "papers_fetched": 0,
+            "papers_new": 0,
+            "papers_processed": 0,
+            "papers_notified": 0,
+            "errors": [],
+        }
+
+        # Scenario 1: No papers fetched today - run full pipeline
+        if not today_papers:
+            log.info("No papers fetched today, running full pipeline")
+            pipeline_stats = await self.run_daily_pipeline()
+            stats.update(pipeline_stats)
+            stats["status"] = "fetched_and_notified"
+            return stats
+
+        # Check notification status
+        notified_papers = [p for p in today_papers if p.is_notified]
+        unnotified_papers = [p for p in today_papers if not p.is_notified]
+
+        log.info(
+            "Today's papers status",
+            total=len(today_papers),
+            notified=len(notified_papers),
+            unnotified=len(unnotified_papers),
+        )
+
+        # Scenario 2: Some papers not notified yet
+        if unnotified_papers:
+            log.info("Processing unnotified papers from today")
+
+            # AI process papers without summary
+            papers_to_process = [p for p in unnotified_papers if p.summary is None]
+            if papers_to_process and self._enable_translation:
+                processed = await self._process_with_ai(papers_to_process)
+                stats["papers_processed"] = len(processed)
+
+            # Reload papers to get updated summaries
+            today_papers = await self._storage.get_papers_by_fetched_date(start_today, end_today)
+            unnotified_papers = [p for p in today_papers if not p.is_notified]
+
+            # Send notifications
+            notified_count = await self._notify(unnotified_papers)
+            stats["papers_notified"] = notified_count
+            stats["status"] = "processed_and_notified"
+
+            log.info("Unnotified papers processed", notified=notified_count)
+            return stats
+
+        # Scenario 3: All papers already notified
+        if force:
+            log.info("Force re-notification of today's papers")
+
+            # Reset notification status
+            guids = [p.guid for p in today_papers]
+            await self._storage.reset_notification_status(guids)
+
+            # Reload papers with reset status
+            today_papers = await self._storage.get_papers_by_fetched_date(start_today, end_today)
+
+            # Re-send notifications
+            notified_count = await self._notify(today_papers)
+            stats["papers_notified"] = notified_count
+            stats["status"] = "re_notified"
+
+            log.info("Papers re-notified", count=notified_count)
+            return stats
+        else:
+            log.info("All papers already notified, use force=true to re-send")
+            stats["status"] = "already_notified"
+            stats["papers_notified"] = 0
+            return stats

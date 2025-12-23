@@ -122,6 +122,36 @@ class PaperStorage(Protocol):
         """
         ...
 
+    async def get_papers_by_fetched_date(
+        self,
+        start_date: datetime,
+        end_date: datetime,
+    ) -> list[Paper]:
+        """Get papers by when they were fetched (not published).
+
+        Args:
+            start_date: Start of the fetch date range.
+            end_date: End of the fetch date range.
+
+        Returns:
+            List of papers fetched within the range.
+
+        Reason: Enables querying papers by fetch date to support
+        manual daily task triggering for today's papers.
+        """
+        ...
+
+    async def reset_notification_status(self, guids: list[str]) -> None:
+        """Reset notification status for specified papers.
+
+        Args:
+            guids: List of paper GUIDs to reset.
+
+        Reason: Allows re-sending notifications for papers that
+        were already notified, useful for manual re-triggers.
+        """
+        ...
+
     async def close(self) -> None:
         """Close the storage connection."""
         ...

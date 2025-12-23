@@ -201,6 +201,51 @@ class SQLitePaperStorage:
             )
             await db.commit()
 
+    async def get_papers_by_fetched_date(
+        self,
+        start_date: datetime,
+        end_date: datetime,
+    ) -> list[Paper]:
+        """Get papers by fetch date (not publish date).
+
+        Reason: Used for manual daily task triggering to find papers
+        fetched today, regardless of their publication date.
+        """
+        async with aiosqlite.connect(self._db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """
+                SELECT * FROM papers
+                WHERE fetched_at >= ? AND fetched_at < ?
+                ORDER BY fetched_at DESC
+                """,
+                (start_date.isoformat(), end_date.isoformat()),
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [self._row_to_paper(row) for row in rows]
+
+    async def reset_notification_status(self, guids: list[str]) -> None:
+        """Reset notification status for re-sending.
+
+        Reason: Allows force re-notification of papers that were
+        already sent, useful for manual testing or corrections.
+        """
+        if not guids:
+            return
+
+        # Reason: Build parameterized query to avoid SQL injection
+        placeholders = ",".join("?" * len(guids))
+        async with aiosqlite.connect(self._db_path) as db:
+            await db.execute(
+                f"""
+                UPDATE papers
+                SET is_notified = 0, notified_at = NULL, updated_at = ?
+                WHERE guid IN ({placeholders})
+                """,
+                (datetime.utcnow().isoformat(), *guids),
+            )
+            await db.commit()
+
     async def close(self) -> None:
         """Close storage (no-op for SQLite as we use connection per operation)."""
         pass
