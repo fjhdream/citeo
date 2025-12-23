@@ -233,17 +233,23 @@ class SQLitePaperStorage:
         if not guids:
             return
 
-        # Reason: Build parameterized query to avoid SQL injection
-        placeholders = ",".join("?" * len(guids))
+        # Reason: Process in batches to handle large lists efficiently
+        # and avoid potential parameter limits
+        batch_size = 500  # SQLite can handle much larger batches than D1
+        now = datetime.utcnow().isoformat()
+
         async with aiosqlite.connect(self._db_path) as db:
-            await db.execute(
-                f"""
-                UPDATE papers
-                SET is_notified = 0, notified_at = NULL, updated_at = ?
-                WHERE guid IN ({placeholders})
-                """,
-                (datetime.utcnow().isoformat(), *guids),
-            )
+            for i in range(0, len(guids), batch_size):
+                batch = guids[i : i + batch_size]
+                placeholders = ",".join("?" * len(batch))
+                await db.execute(
+                    f"""
+                    UPDATE papers
+                    SET is_notified = 0, notified_at = NULL, updated_at = ?
+                    WHERE guid IN ({placeholders})
+                    """,
+                    (now, *batch),
+                )
             await db.commit()
 
     async def close(self) -> None:

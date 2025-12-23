@@ -296,20 +296,27 @@ class D1PaperStorage:
 
         Reason: Allows force re-notification of papers that were
         already sent, useful for manual testing or corrections.
+        D1 has limitations with large IN clauses, so we batch updates.
         """
         if not guids:
             return
 
-        # Reason: Build parameterized query to avoid SQL injection
-        placeholders = ",".join("?" * len(guids))
-        await self._execute(
-            f"""
-            UPDATE papers
-            SET is_notified = 0, notified_at = NULL, updated_at = ?
-            WHERE guid IN ({placeholders})
-            """,
-            (datetime.utcnow().isoformat(), *guids),
-        )
+        # Reason: D1 API may have issues with very large IN clauses (182+ items),
+        # so we process in batches to avoid 400 errors
+        batch_size = 50
+        now = datetime.utcnow().isoformat()
+
+        for i in range(0, len(guids), batch_size):
+            batch = guids[i : i + batch_size]
+            placeholders = ",".join("?" * len(batch))
+            await self._execute(
+                f"""
+                UPDATE papers
+                SET is_notified = 0, notified_at = NULL, updated_at = ?
+                WHERE guid IN ({placeholders})
+                """,
+                (now, *batch),
+            )
 
     async def close(self) -> None:
         """Close storage connection."""
