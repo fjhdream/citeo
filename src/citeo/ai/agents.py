@@ -38,6 +38,9 @@ class SummaryOutput(BaseModel):
     """Structured output for paper summarization.
 
     Used as output_type for the summarizer agent to ensure consistent response format.
+
+    Reason: Multi-dimensional scoring provides detailed evaluation for better filtering,
+    but only relevance_score is persisted to database for backward compatibility.
     """
 
     title_zh: str = Field(..., description="Chinese translated title")
@@ -46,11 +49,51 @@ class SummaryOutput(BaseModel):
         ...,
         description="3-5 key points in Chinese highlighting main contributions",
     )
+
+    # Multi-dimensional scores (for agent evaluation, not persisted)
+    innovation_score: float = Field(
+        ...,
+        ge=1.0,
+        le=10.0,
+        description="Innovation: novelty of methods/architecture (1-10)",
+    )
+    practicality_score: float = Field(
+        ...,
+        ge=1.0,
+        le=10.0,
+        description="Practicality: applicability to real development (1-10)",
+    )
+    engineering_value: float = Field(
+        ...,
+        ge=1.0,
+        le=10.0,
+        description="Engineering value: contribution to software/Agent systems (1-10)",
+    )
+    technical_depth: float = Field(
+        ...,
+        ge=1.0,
+        le=10.0,
+        description="Technical depth: complexity and rigor (1-10)",
+    )
+    impact_potential: float = Field(
+        ...,
+        ge=1.0,
+        le=10.0,
+        description="Impact potential: potential influence on the field (1-10)",
+    )
+
+    # Overall score (persisted to database as relevance_score)
     relevance_score: float = Field(
         ...,
         ge=1.0,
         le=10.0,
-        description="Programmer recommendation score from 1 to 10 based on software engineering and agent architecture relevance",
+        description="Overall programmer recommendation score (weighted average of dimensions)",
+    )
+
+    score_explanation: str = Field(
+        ...,
+        description="Brief explanation of scoring rationale (max 100 chars)",
+        max_length=100,
     )
 
 
@@ -110,33 +153,96 @@ summarizer_agent = Agent(
 1. 将论文标题翻译成准确、专业的中文
 2. 将摘要翻译成流畅的中文，保持学术严谨性
 3. 提取3-5个关键要点，用简洁的中文描述论文的核心贡献
-4. 基于对程序员的推荐程度，给出1-10的评分，重点关注软件工程和Agent架构方面的价值
+4. **从5个维度分别评���（1-10分），然后计算综合评分**
 
 注意事项：
 - 专业术语优先使用领域内通用译法（如 Transformer、Attention 等保留英文）
 - 保持原文的学术风格，避免口语化表达
 - 关键要点应该突出论文的创新点、方法和贡献
 
-评分标准（1-10分，针对程序员的实用性）：
-- 9-10分：对软件工程/Agent架构有重大突破性贡献，可直接应用于生产系统
-  * 例如：新的Agent架构模式、革命性的编程范式、重大性能优化技术
-  * 例如：多Agent协作框架、Code Generation重大突破、软件工程工具链创新
+## 五维度评分标准（每个维度独立评分 1-10）
 
-- 8分：对软件工程/Agent系统有显著实用价值
-  * 例如：改进的Agent规划算法、实用的代码优化方法、工程化的AI应用方案
-  * 例如：提升Agent推理能力、改进工具调用机制、软件测试新方法
+### 1️⃣ 创新性 (innovation_score)
+评估论文方法/架构的新颖程度：
+- **9-10分**：首创性研究，开辟新领域或新范式
+  * 例如：首个提出的新架构模式、突破性的理论框架
+- **7-8分**：重大创新，明显优于现有方法
+  * 例如：显著改进现有方法、创新的组合方式
+- **5-6分**：渐进式改进，有一定新意
+  * 例如：在现有方法上的优化、新的应用场景
+- **3-4分**：小幅改进，新颖性有限
+- **1-2分**：增量工作，基本无创新
 
-- 6-7分：与软件开发/Agent系统相关，有一定参考价值
-  * 例如：AI辅助编程的实验性方法、Agent某个子模块的改进
-  * 例如：程序分析技术、软件bug检测、代码理解模型
+### 2️⃣ 实用性 (practicality_score)
+评估可应用于实际开发的程度：
+- **9-10分**：可直接用于生产环境
+  * 有开源代码、详细文档、易于集成
+  * 已在真实场景验证效果
+- **7-8分**：经过少量调整即可应用
+  * 方法清晰、可复现性强
+- **5-6分**：需要一定工程化工作才能落地
+  * 缺少部分实现细节、需要适配
+- **3-4分**：工程化难度较大
+- **1-2分**：纯理论研究，难以实际应用
 
-- 4-5分：AI/ML领域的通用进展，对编程有间接影响
-  * 例如：通用LLM能力提升、推理效率优化、知识表示改进
+### 3️⃣ 工程价值 (engineering_value)
+评估对软件工程/Agent系统的贡献：
+- **9-10分**：解决核心工程问题，影响深远
+  * Agent架构突破、软件工程范式创新
+  * 代码生成/测试/调试的重大进展
+- **7-8分**：对特定工程场景价值显著
+  * 提升Agent规划/推理能力
+  * 改进开发工具链、优化性能
+- **5-6分**：与软件开发相关，有一定参考价值
+  * 程序分析、bug检测、代码理解
+- **3-4分**：工程相关性较弱
+- **1-2分**：与软件工程几乎无关
 
-- 1-3分：纯理论研究或与软件工程关系较远
-  * 例如：纯数学理论、特定垂直领域应用（医疗、金融等）、硬件相关研究
+### 4️⃣ 技术深度 (technical_depth)
+评估技术复杂度和理论深度：
+- **9-10分**：理论深刻、方法复杂且严谨
+  * 深厚的数学/理论基础
+- **7-8分**：技术实现有一定深度
+  * 涉及复杂算法或系统设计
+- **5-6分**：中等复杂度
+- **3-4分**：技术较为简单
+- **1-2分**：技术含量低
 
-特别关注的主题（高分）：
+### 5️⃣ 影响力潜力 (impact_potential)
+评估对领域发展的潜在影响：
+- **9-10分**：可能改变领域范式、引领新方向
+- **7-8分**：有望成为主流方法、被广泛采纳
+- **5-6分**：可能在特定子领域产生影响
+- **3-4分**：影响范围有限
+- **1-2分**：影响力较小
+
+## 综合评分计算 (relevance_score)
+
+基于以下权重计算综合评分（针对程序员的总体价值）：
+```
+relevance_score =
+  实用性(30%) + 工程价值(25%) + 创新性(20%) + 影响力(15%) + 技术深度(10%)
+```
+
+**综合评分参考标准**：
+- **9-10分**：强烈推荐！对程序员价值极高
+  * 多个维度都是高分（7分以上）
+  * 特别是实用性和工程价值突出
+- **7-8分**：推荐阅读，有明确应用价值
+  * 实用性或工程价值较高
+- **5-6分**：可以关注，有一定参考意义
+  * 部分维度有亮点
+- **3-4分**：选读，价值有限
+- **1-2分**：不推荐，与程序员关系较远
+
+## 评分说明 (score_explanation)
+用一句话（50-100字）总结评分理由，格式如下：
+- 突出1-2个最高分的维度
+- 说明为什么推荐/不推荐
+- 例如："首创Agent规划方法，开源可用，工程价值高但技术深度中等"
+- 例如："纯理论LLM研究，创新性强但实用性较弱，需进一步工程化"
+
+## 特别关注的主题（通常获得更高的工程价值/实用性评分）
 - Agent系统架构：多Agent协作、规划、工具使用、记忆机制
 - 软件工程：代码生成、程序分析、bug检测、测试自动化
 - 开发工具：IDE增强、编译器优化、调试工具
