@@ -118,6 +118,33 @@ class NonceStorage:
             logger.warning("Nonce already used", nonce=nonce)
             return False
 
+    async def reset_nonce(self, nonce: str) -> bool:
+        """Reset a used nonce so it can be reused (e.g., after analysis failure).
+
+        Args:
+            nonce: The nonce to reset.
+
+        Returns:
+            True if nonce was deleted, False if not found.
+
+        Reason: When deep analysis fails, the user should be able to
+        click the button again. Resetting the nonce re-enables the signed URL.
+        """
+        await self._init_table()
+
+        async with aiosqlite.connect(self._db_path) as db:
+            cursor = await db.execute(
+                "DELETE FROM signed_url_nonces WHERE nonce = ?",
+                (nonce,),
+            )
+            await db.commit()
+            deleted = cursor.rowcount > 0
+
+        if deleted:
+            logger.info("Nonce reset for retry", nonce=nonce[:8])
+
+        return deleted
+
     async def cleanup_expired_nonces(self, expiry_hours: int = 168) -> int:
         """Remove expired nonces from storage.
 

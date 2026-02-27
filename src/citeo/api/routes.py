@@ -338,7 +338,7 @@ async def _run_analysis_background(arxiv_id: str, force: bool = False) -> None:
 
 
 async def _run_analysis_background_with_platform(
-    arxiv_id: str, platform: str, force: bool = False
+    arxiv_id: str, platform: str, force: bool = False, nonce: str | None = None
 ) -> None:
     """Run PDF analysis in background with platform-specific notification.
 
@@ -346,6 +346,7 @@ async def _run_analysis_background_with_platform(
         arxiv_id: arXiv paper ID.
         platform: Platform that triggered analysis (telegram, feishu).
         force: If True, force re-analysis even if cached.
+        nonce: Signed URL nonce, reset on failure to allow retry.
 
     Reason: Isolate notifications to the triggering platform only.
     """
@@ -360,6 +361,10 @@ async def _run_analysis_background_with_platform(
         result = await pdf_service.analyze_paper(arxiv_id, force=force, skip_notification=True)
 
         _analysis_tasks[arxiv_id] = result.get("status", "completed")
+
+        # Reason: If analysis returned an error status, reset nonce so user can retry
+        if result["status"] == "error" and nonce:
+            await _reset_nonce_for_retry(nonce, arxiv_id)
 
         # Send platform-specific notification on success
         if result["status"] == "completed":
@@ -388,6 +393,25 @@ async def _run_analysis_background_with_platform(
             platform=platform,
             error=str(e),
         )
+        # Reason: Reset nonce on exception so user can click again after failure
+        if nonce:
+            await _reset_nonce_for_retry(nonce, arxiv_id)
+
+
+async def _reset_nonce_for_retry(nonce: str, arxiv_id: str) -> None:
+    """Reset a consumed nonce so the user can retry deep analysis.
+
+    Reason: If analysis fails (e.g., API 502), the signed URL should work again
+    so the user can click the button to retry.
+    """
+    try:
+        url_generator = get_url_generator()
+        nonce_storage = url_generator._nonce_storage
+        if nonce_storage:
+            await nonce_storage.reset_nonce(nonce)
+            logger.info("Nonce reset for retry after failure", arxiv_id=arxiv_id)
+    except Exception as e:
+        logger.warning("Failed to reset nonce", arxiv_id=arxiv_id, error=str(e))
 
 
 def _get_platform_notifier(platform: str) -> Notifier | None:
@@ -526,11 +550,13 @@ async def trigger_analysis_signed(
         }
 
     # 5. Start background analysis with platform context
+    # Reason: Pass nonce so it can be reset if analysis fails, enabling retry
     background_tasks.add_task(
         _run_analysis_background_with_platform,
         arxiv_id=arxiv_id,
         platform=platform,
         force=False,  # Don't force re-analysis from signed URL
+        nonce=nonce,
     )
 
     logger.info(
