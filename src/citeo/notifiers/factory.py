@@ -10,6 +10,66 @@ from citeo.notifiers.telegram import TelegramNotifier
 logger = structlog.get_logger()
 
 
+def create_notifiers_from_channels(
+    channels: list[dict],
+    url_generator=None,
+) -> Notifier | MultiNotifier:
+    """Create notifier(s) from a list of channel config dicts.
+
+    Each dict must have a "type" key ("telegram" or "feishu") plus
+    type-specific fields. Supports multiple instances of the same type.
+
+    Args:
+        channels: List of channel config dicts.
+        url_generator: Optional SignedURLGenerator for creating analysis links.
+
+    Returns:
+        Single notifier or MultiNotifier if multiple channels configured.
+
+    Raises:
+        ValueError: If required config is missing or no valid channels.
+    """
+    notifiers: list[Notifier] = []
+
+    for ch in channels:
+        ntype = ch.get("type", "").strip().lower()
+
+        if ntype == "telegram":
+            token = ch.get("token")
+            chat_id = ch.get("chat_id")
+            if not token or not chat_id:
+                raise ValueError("Telegram channel requires 'token' and 'chat_id'")
+            notifiers.append(
+                TelegramNotifier(token=token, chat_id=chat_id, url_generator=url_generator)
+            )
+            logger.info("Telegram notifier configured (channels)", chat_id=chat_id)
+
+        elif ntype == "feishu":
+            webhook_url = ch.get("webhook_url")
+            if not webhook_url:
+                raise ValueError("Feishu channel requires 'webhook_url'")
+            notifiers.append(
+                FeishuNotifier(
+                    webhook_url=webhook_url,
+                    secret=ch.get("secret"),
+                    url_generator=url_generator,
+                )
+            )
+            logger.info("Feishu notifier configured (channels)")
+
+        else:
+            logger.warning("Unknown notifier type in channels", type=ntype)
+
+    if not notifiers:
+        raise ValueError("No valid notifiers configured in NOTIFIER_CHANNELS")
+
+    if len(notifiers) == 1:
+        return notifiers[0]
+
+    logger.info("Multi-notifier configured (channels)", count=len(notifiers))
+    return MultiNotifier(notifiers)
+
+
 def create_notifier(
     notifier_types: list[str],
     telegram_token: str | None = None,

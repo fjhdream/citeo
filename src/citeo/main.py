@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from citeo.api import init_services, router
 from citeo.api.auth_routes import router as auth_router
 from citeo.config.settings import settings
-from citeo.notifiers import create_notifier
+from citeo.notifiers import create_notifier, create_notifiers_from_channels
 from citeo.parsers.arxiv_parser import ArxivParser
 from citeo.scheduler import create_scheduler, run_once
 from citeo.services.paper_service import PaperService
@@ -60,6 +60,17 @@ def _create_notifier():
         logger.info("URL generator initialized for notification links")
     except ValueError as e:
         logger.warning("URL generator not configured, analysis links disabled", error=str(e))
+
+    # Prefer declarative NOTIFIER_CHANNELS if set; otherwise fall back to flat config
+    if settings.notifier_channels:
+        logger.info(
+            "Using NOTIFIER_CHANNELS config",
+            channel_count=len(settings.notifier_channels),
+        )
+        return create_notifiers_from_channels(
+            channels=settings.notifier_channels,
+            url_generator=url_generator,
+        )
 
     return create_notifier(
         notifier_types=settings.notifier_types,

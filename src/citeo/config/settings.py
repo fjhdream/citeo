@@ -92,6 +92,13 @@ class Settings(BaseSettings):
         description="Notification channels to use (comma-separated)",
     )
 
+    # Multi-channel notifier config (JSON array, supports same-type multi-instance)
+    # Reason: Flat fields only allow one instance per type; this enables e.g. two feishu webhooks
+    notifier_channels: list[dict] | None = Field(
+        default=None,
+        description='JSON array of channel configs, e.g. [{"type":"feishu","webhook_url":"..."}]',
+    )
+
     # RSS
     rss_fetch_timeout: int = 30
     rss_user_agent: str = "Citeo/1.0 (arXiv RSS Reader)"
