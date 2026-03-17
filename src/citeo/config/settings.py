@@ -103,8 +103,13 @@ class Settings(BaseSettings):
     @field_validator("notifier_channels", mode="before")
     @classmethod
     def parse_notifier_channels(cls, v):
-        """Parse JSON string from environment variable."""
+        """Parse JSON string from environment variable.
+
+        Handles multi-line strings by removing newlines and extra whitespace.
+        """
         if isinstance(v, str):
+            # Remove newlines and normalize whitespace for JSON parsing
+            v = v.replace("\n", "").replace("\r", "")
             return json.loads(v)
         return v
 
