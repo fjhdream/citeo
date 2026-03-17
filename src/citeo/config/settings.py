@@ -3,9 +3,10 @@
 Supports environment variables and .env file loading.
 """
 
+import json
 from pathlib import Path
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -98,6 +99,14 @@ class Settings(BaseSettings):
         default=None,
         description='JSON array of channel configs, e.g. [{"type":"feishu","webhook_url":"..."}]',
     )
+
+    @field_validator("notifier_channels", mode="before")
+    @classmethod
+    def parse_notifier_channels(cls, v):
+        """Parse JSON string from environment variable."""
+        if isinstance(v, str):
+            return json.loads(v)
+        return v
 
     # RSS
     rss_fetch_timeout: int = 30
