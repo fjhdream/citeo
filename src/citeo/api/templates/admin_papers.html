@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Citeo 论文管理</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --success-bg: #dcfce7;
+            --success-text: #166534;
+            --error-bg: #fee2e2;
+            --error-text: #991b1b;
+            --text: #1f2937;
+            --text-light: #6b7280;
+            --bg: #ffffff;
+            --bg-alt: #f9fafb;
+            --border: #e5e7eb;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --primary: #60a5fa;
+                --text: #f9fafb;
+                --text-light: #d1d5db;
+                --bg: #111827;
+                --bg-alt: #1f2937;
+                --border: #374151;
+            }
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            margin: 0 auto;
+            max-width: 960px;
+            padding: 2rem 1rem 4rem;
+        }
+        .page-header, .paper-item {
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--bg-alt);
+        }
+        .page-header {
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+        }
+        .stats {
+            color: var(--text-light);
+            margin-top: 0.5rem;
+        }
+        .paper-list {
+            display: grid;
+            gap: 1rem;
+        }
+        .paper-item {
+            padding: 1rem 1.25rem;
+        }
+        .paper-title {
+            margin: 0 0 0.25rem;
+            font-size: 1.05rem;
+        }
+        .paper-original {
+            margin: 0 0 0.5rem;
+            color: var(--text-light);
+            font-style: italic;
+        }
+        .paper-meta {
+            color: var(--text-light);
+            font-size: 0.95rem;
+            margin-bottom: 0.75rem;
+        }
+        .badges, .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        .badge, .action {
+            border-radius: 999px;
+            padding: 0.35rem 0.8rem;
+            font-size: 0.9rem;
+            text-decoration: none;
+            border: 0;
+            cursor: pointer;
+        }
+        .badge.success { background: var(--success-bg); color: var(--success-text); }
+        .badge.error { background: var(--error-bg); color: var(--error-text); }
+        .action.primary { background: var(--primary); color: white; }
+        .action.secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
+        .action[disabled] { opacity: 0.6; cursor: wait; }
+    </style>
+</head>
+<body data-api-key="{{ api_key }}">
+    <section class="page-header">
+        <h1>Citeo 论文管理</h1>
+        <form method="get">
+            {% if api_key %}
+            <input type="hidden" name="api_key" value="{{ api_key }}">
+            {% endif %}
+            <input type="date" name="date" value="{{ selected_date }}" onchange="this.form.submit()">
+        </form>
+        <div class="stats">今天共 {{ stats.total }} 篇 | {{ stats.with_summary }} 篇有摘要 | {{ stats.with_analysis }} 篇有深度分析</div>
+    </section>
+
+    <section class="paper-list">
+        {% for paper in papers %}
+        <article class="paper-item">
+            <h2 class="paper-title">{{ paper.summary.title_zh if paper.summary else paper.title }}</h2>
+            <p class="paper-original">{{ paper.title }}</p>
+            <div class="paper-meta">
+                📅 {{ paper.published_at.strftime('%Y-%m-%d') }} |
+                👤 {{ paper.authors[:3]|join(', ') }}{% if paper.authors|length > 3 %} et al.{% endif %} |
+                🏷️ {{ paper.categories[:3]|join(', ') }}
+            </div>
+            <div class="badges">
+                {% if paper.summary %}
+                <span class="badge success">✅ 摘要</span>
+                {% else %}
+                <span class="badge error">❌ 摘要</span>
+                {% endif %}
+
+                {% if paper.summary and paper.summary.deep_analysis %}
+                <span class="badge success">✅ 深度分析</span>
+                {% else %}
+                <span class="badge error">❌ 深度分析</span>
+                {% endif %}
+            </div>
+            <div class="actions" style="margin-top: 0.75rem;">
+                <a class="action primary" href="{{ paper.abs_url }}" target="_blank" rel="noopener">arXiv</a>
+                <a class="action secondary" href="{{ paper.pdf_url }}" target="_blank" rel="noopener">PDF</a>
+                {% if not paper.summary %}
+                <button class="action secondary" type="button" onclick="retrySummary('{{ paper.arxiv_id }}', this)">🔄 重试摘要</button>
+                {% endif %}
+                {% if not (paper.summary and paper.summary.deep_analysis) %}
+                <button class="action secondary" type="button" onclick="retryAnalysis('{{ paper.arxiv_id }}', this)">🔄 重试深度分析</button>
+                {% endif %}
+                {% if paper.summary and paper.summary.deep_analysis %}
+                <a class="action secondary" href="/api/view/{{ paper.arxiv_id }}" target="_blank" rel="noopener">📖 查看深度分析</a>
+                {% endif %}
+            </div>
+        </article>
+        {% endfor %}
+    </section>
+
+    <script>
+        async function postAdminAction(path, button, idleText) {
+            const headers = {"Content-Type": "application/json"};
+            const apiKey = document.body.dataset.apiKey;
+            if (apiKey) {
+                headers["X-API-Key"] = apiKey;
+            }
+
+            button.disabled = true;
+            button.textContent = "处理中...";
+
+            try {
+                const response = await fetch(path, {method: "POST", headers});
+                if (response.ok) {
+                    window.location.reload();
+                    return;
+                }
+
+                const payload = await response.json();
+                alert(payload.detail || "操作失败");
+            } catch (err) {
+                alert("网络错误: " + err.message);
+            }
+
+            button.disabled = false;
+            button.textContent = idleText;
+        }
+
+        function retrySummary(arxivId, button) {
+            return postAdminAction("/api/admin/papers/" + arxivId + "/retry-summary", button, "🔄 重试摘要");
+        }
+
+        function retryAnalysis(arxivId, button) {
+            return postAdminAction("/api/admin/papers/" + arxivId + "/retry-analysis", button, "🔄 重试深度分析");
+        }
+    </script>
+</body>
+</html>
