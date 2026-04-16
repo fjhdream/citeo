@@ -99,6 +99,9 @@
             <input type="date" name="date" value="{{ selected_date }}" onchange="this.form.submit()">
         </form>
         <div class="stats">今天共 {{ stats.total }} 篇 | {{ stats.with_summary }} 篇有摘要 | {{ stats.with_analysis }} 篇有深度分析</div>
+        <div style="margin-top: 0.75rem;">
+            <button class="action primary" type="button" onclick="retriggerDailyTask(this)">🔄 重新发送今日通知</button>
+        </div>
     </section>
 
     <section class="paper-list">
@@ -175,6 +178,37 @@
 
         function retryAnalysis(arxivId, button) {
             return postAdminAction("/api/admin/papers/" + arxivId + "/retry-analysis", button, "🔄 重试深度分析");
+        }
+
+        async function retriggerDailyTask(button) {
+            if (!confirm("确认重新发送今日所有论文的通知？")) return;
+
+            const headers = {"Content-Type": "application/json"};
+            const apiKey = document.body.dataset.apiKey;
+            if (apiKey) {
+                headers["X-API-Key"] = apiKey;
+            }
+
+            button.disabled = true;
+            button.textContent = "处理中...";
+
+            try {
+                const response = await fetch("/api/daily-task/trigger?force=true", {method: "POST", headers});
+                const payload = await response.json();
+
+                if (response.ok) {
+                    alert("✅ " + (payload.message || "通知已重新发送"));
+                    window.location.reload();
+                    return;
+                }
+
+                alert("❌ " + (payload.detail || "操作失败"));
+            } catch (err) {
+                alert("网络错误: " + err.message);
+            }
+
+            button.disabled = false;
+            button.textContent = "🔄 重新发送今日通知";
         }
     </script>
 </body>
