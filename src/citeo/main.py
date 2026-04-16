@@ -17,7 +17,7 @@ from fastapi import FastAPI
 # Add project root to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from citeo.api import init_services, router
+from citeo.api import admin_api_router, admin_page_router, init_services, router
 from citeo.api.auth_routes import router as auth_router
 from citeo.config.settings import settings
 from citeo.notifiers import create_notifier, create_notifiers_from_channels
@@ -158,6 +158,8 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.include_router(router)
+    app.include_router(admin_page_router)
+    app.include_router(admin_api_router)
     app.include_router(auth_router)
     return app
 
