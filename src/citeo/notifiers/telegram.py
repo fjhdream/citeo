@@ -92,8 +92,12 @@ class TelegramNotifier:
         Returns:
             Number of successfully sent notifications.
         """
+        log = logger.bind(chat_id=self._chat_id, notifier_id=self._notifier_id)
+
         if not papers:
             return 0
+
+        log.info("TelegramNotifier sending papers", paper_count=len(papers))
 
         # Send header message with truncation info
         # Reason: Show users how many papers were selected vs total high-score papers
@@ -117,6 +121,7 @@ class TelegramNotifier:
             # Rate limiting delay
             await asyncio.sleep(self._rate_limit_delay)
 
+        log.info("TelegramNotifier finished sending papers", success_count=success_count)
         return success_count
 
     async def send_message(self, message: str) -> bool:

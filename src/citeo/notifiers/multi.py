@@ -66,6 +66,12 @@ class MultiNotifier:
         if not self._notifiers or not papers:
             return 0
 
+        logger.info(
+            "MultiNotifier sending papers to all channels",
+            notifier_count=len(self._notifiers),
+            paper_count=len(papers),
+        )
+
         # Send to all notifiers in parallel, passing truncation info
         results = await asyncio.gather(
             *[
@@ -74,6 +80,31 @@ class MultiNotifier:
             ],
             return_exceptions=True,
         )
+
+        # Log results for each notifier
+        for i, (notifier, result) in enumerate(zip(self._notifiers, results)):
+            notifier_type = type(notifier).__name__
+            if isinstance(result, Exception):
+                logger.error(
+                    "Notifier failed to send papers",
+                    notifier_index=i,
+                    notifier_type=notifier_type,
+                    error=str(result),
+                )
+            elif isinstance(result, int):
+                logger.info(
+                    "Notifier sent papers successfully",
+                    notifier_index=i,
+                    notifier_type=notifier_type,
+                    success_count=result,
+                )
+            else:
+                logger.warning(
+                    "Notifier returned unexpected result",
+                    notifier_index=i,
+                    notifier_type=notifier_type,
+                    result=result,
+                )
 
         # Return the max success count across all notifiers
         success_counts = [r for r in results if isinstance(r, int)]
