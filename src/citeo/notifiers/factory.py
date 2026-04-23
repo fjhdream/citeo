@@ -31,7 +31,7 @@ def create_notifiers_from_channels(
     """
     notifiers: list[Notifier] = []
 
-    for ch in channels:
+    for i, ch in enumerate(channels):
         ntype = ch.get("type", "").strip().lower()
 
         if ntype == "telegram":
@@ -39,23 +39,41 @@ def create_notifiers_from_channels(
             chat_id = ch.get("chat_id")
             if not token or not chat_id:
                 raise ValueError("Telegram channel requires 'token' and 'chat_id'")
+            # Generate unique notifier_id using token to differentiate multiple bots with same chat_id
+            # Reason: Two bots with same chat_id would have same auto-generated ID
+            import hashlib
+            notifier_id = hashlib.sha256(f"telegram:{token}:{chat_id}".encode()).hexdigest()[:16]
             notifiers.append(
-                TelegramNotifier(token=token, chat_id=chat_id, url_generator=url_generator)
+                TelegramNotifier(
+                    token=token,
+                    chat_id=chat_id,
+                    url_generator=url_generator,
+                    notifier_id=notifier_id,
+                )
             )
-            logger.info("Telegram notifier configured (channels)", chat_id=chat_id)
+            logger.info(
+                "Telegram notifier configured (channels)",
+                chat_id=chat_id,
+                notifier_id=notifier_id,
+                index=i,
+            )
 
         elif ntype == "feishu":
             webhook_url = ch.get("webhook_url")
             if not webhook_url:
                 raise ValueError("Feishu channel requires 'webhook_url'")
+            # Generate unique notifier_id for Feishu
+            import hashlib
+            notifier_id = hashlib.sha256(f"feishu:{webhook_url}".encode()).hexdigest()[:16]
             notifiers.append(
                 FeishuNotifier(
                     webhook_url=webhook_url,
                     secret=ch.get("secret"),
                     url_generator=url_generator,
+                    notifier_id=notifier_id,
                 )
             )
-            logger.info("Feishu notifier configured (channels)")
+            logger.info("Feishu notifier configured (channels)", notifier_id=notifier_id, index=i)
 
         else:
             logger.warning("Unknown notifier type in channels", type=ntype)
