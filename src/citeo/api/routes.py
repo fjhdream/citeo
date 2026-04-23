@@ -66,9 +66,21 @@ def init_services(settings: Settings) -> None:
         logger.warning("URL generator not configured, analysis links disabled", error=str(e))
 
     # Create notifier if configured
-    # Reason: Notifier is optional, only create if notifier_types is configured
+    # Reason: Support both NOTIFIER_CHANNELS (JSON array) and legacy flat config
     try:
-        if settings.notifier_types:
+        # Prefer declarative NOTIFIER_CHANNELS if set; otherwise fall back to flat config
+        if settings.notifier_channels:
+            from citeo.notifiers.factory import create_notifiers_from_channels
+
+            logger.info(
+                "Using NOTIFIER_CHANNELS config for API",
+                channel_count=len(settings.notifier_channels),
+            )
+            _notifier = create_notifiers_from_channels(
+                channels=settings.notifier_channels,
+                url_generator=url_generator,
+            )
+        elif settings.notifier_types:
             _notifier = create_notifier(
                 notifier_types=settings.notifier_types,
                 telegram_token=(
@@ -87,6 +99,8 @@ def init_services(settings: Settings) -> None:
                 ),
                 url_generator=url_generator,
             )
+        else:
+            _notifier = None
     except ValueError as e:
         # Log warning but don't fail initialization
         logger.warning("Failed to create notifier", error=str(e))
@@ -338,7 +352,7 @@ async def _run_analysis_background(arxiv_id: str, force: bool = False) -> None:
 
 
 async def _run_analysis_background_with_platform(
-    arxiv_id: str, platform: str, force: bool = False, nonce: str | None = None
+    arxiv_id: str, platform: str, force: bool = False, nonce: str | None = None, notifier_id: str | None = None
 ) -> None:
     """Run PDF analysis in background with platform-specific notification.
 
@@ -347,6 +361,7 @@ async def _run_analysis_background_with_platform(
         platform: Platform that triggered analysis (telegram, feishu).
         force: If True, force re-analysis even if cached.
         nonce: Signed URL nonce, reset on failure to allow retry.
+        notifier_id: Optional unique notifier instance ID for precise matching.
 
     Reason: Isolate notifications to the triggering platform only.
     """
@@ -371,18 +386,20 @@ async def _run_analysis_background_with_platform(
             paper = await storage.get_paper_by_arxiv_id(arxiv_id)
             if paper and paper.summary and paper.summary.deep_analysis:
                 # Get platform-specific notifier
-                notifier = _get_platform_notifier(platform)
+                notifier = _get_platform_notifier(platform, notifier_id)
                 if notifier:
                     await notifier.send_deep_analysis(paper)
                     logger.info(
                         "Platform-specific analysis notification sent",
                         arxiv_id=arxiv_id,
                         platform=platform,
+                        notifier_id=notifier_id,
                     )
                 else:
                     logger.warning(
                         "No notifier found for platform",
                         platform=platform,
+                        notifier_id=notifier_id,
                     )
 
     except Exception as e:
@@ -414,17 +431,19 @@ async def _reset_nonce_for_retry(nonce: str, arxiv_id: str) -> None:
         logger.warning("Failed to reset nonce", arxiv_id=arxiv_id, error=str(e))
 
 
-def _get_platform_notifier(platform: str) -> Notifier | None:
+def _get_platform_notifier(platform: str, notifier_id: str | None = None) -> Notifier | None:
     """Get notifier instance for specific platform.
 
     Args:
         platform: Platform identifier (telegram or feishu).
+        notifier_id: Optional unique notifier instance ID for precise matching.
 
     Returns:
         Platform-specific notifier instance, or None if not found.
 
-    Reason: Isolate notifications to the triggering platform only.
-    When MultiNotifier is used, extract the specific platform notifier.
+    Reason: Isolate notifications to the triggering notifier instance.
+    When notifier_id is provided, match the exact instance;
+    otherwise fall back to first matching platform type.
     """
     if not _notifier:
         return None
@@ -434,9 +453,12 @@ def _get_platform_notifier(platform: str) -> Notifier | None:
     from citeo.notifiers.multi import MultiNotifier
     from citeo.notifiers.telegram import TelegramNotifier
 
-    # If _notifier is MultiNotifier, extract the specific platform notifier
+    # If _notifier is MultiNotifier, extract the specific notifier
     if isinstance(_notifier, MultiNotifier):
-        # Access internal notifiers list
+        for n in _notifier._notifiers:
+            if notifier_id and hasattr(n, "_notifier_id") and n._notifier_id == notifier_id:
+                return n
+        # Fallback: match by platform type if notifier_id not found
         for n in _notifier._notifiers:
             if platform == "telegram" and isinstance(n, TelegramNotifier):
                 return n
@@ -444,7 +466,9 @@ def _get_platform_notifier(platform: str) -> Notifier | None:
                 return n
         return None
     else:
-        # Single notifier - check if it matches platform
+        # Single notifier - check if it matches
+        if notifier_id and hasattr(_notifier, "_notifier_id") and _notifier._notifier_id == notifier_id:
+            return _notifier
         if platform == "telegram" and isinstance(_notifier, TelegramNotifier):
             return _notifier
         elif platform == "feishu" and isinstance(_notifier, FeishuNotifier):
@@ -468,6 +492,7 @@ async def trigger_analysis_signed(
     timestamp: int = Query(..., description="Unix timestamp"),
     nonce: str = Query(..., description="Unique nonce (UUID)"),
     signature: str = Query(..., description="HMAC signature"),
+    notifier_id: str | None = Query(None, description="Unique notifier instance ID"),
     background_tasks: BackgroundTasks = None,
 ) -> dict:
     """Trigger PDF analysis via signed URL (no authentication required).
@@ -482,6 +507,7 @@ async def trigger_analysis_signed(
         timestamp: URL generation timestamp.
         nonce: One-time-use unique identifier.
         signature: HMAC-SHA256 signature of parameters.
+        notifier_id: Optional unique notifier instance ID for precise matching.
 
     Returns:
         Status dict indicating processing has started.
@@ -506,6 +532,7 @@ async def trigger_analysis_signed(
         timestamp=timestamp,
         nonce=nonce,
         signature=signature,
+        notifier_id=notifier_id,
     )
 
     if not verification.valid:
@@ -557,6 +584,7 @@ async def trigger_analysis_signed(
         platform=platform,
         force=False,  # Don't force re-analysis from signed URL
         nonce=nonce,
+        notifier_id=notifier_id,
     )
 
     logger.info(

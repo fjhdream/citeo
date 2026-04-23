@@ -194,19 +194,20 @@ class SignedURLGenerator:
         self._expiry_seconds = expiry_hours * 3600
         self._nonce_storage = nonce_storage
 
-    def generate_analysis_url(self, arxiv_id: str, platform: str) -> str:
+    def generate_analysis_url(self, arxiv_id: str, platform: str, notifier_id: str | None = None) -> str:
         """Generate signed URL for triggering analysis.
 
         Args:
             arxiv_id: arXiv paper ID (e.g., "2512.14709").
             platform: Platform identifier ("telegram" or "feishu").
+            notifier_id: Optional unique notifier instance ID for precise matching.
 
         Returns:
             Full URL with signature and nonce.
         """
         timestamp = int(time.time())
         nonce = str(uuid.uuid4())  # Generate unique nonce
-        signature = self._compute_signature(arxiv_id, platform, timestamp, nonce)
+        signature = self._compute_signature(arxiv_id, platform, timestamp, nonce, notifier_id)
 
         base_url = settings.api_base_url.rstrip("/")
         url = (
@@ -218,17 +219,22 @@ class SignedURLGenerator:
             f"signature={signature}"
         )
 
+        # Add notifier_id if provided
+        if notifier_id:
+            url += f"&notifier_id={notifier_id}"
+
         logger.debug(
             "Generated signed URL",
             arxiv_id=arxiv_id,
             platform=platform,
+            notifier_id=notifier_id,
             expires_at=datetime.fromtimestamp(timestamp + self._expiry_seconds).isoformat(),
         )
 
         return url
 
     async def verify_url(
-        self, arxiv_id: str, platform: str, timestamp: int, nonce: str, signature: str
+        self, arxiv_id: str, platform: str, timestamp: int, nonce: str, signature: str, notifier_id: str | None = None
     ) -> SignedURLVerification:
         """Verify signed URL parameters.
 
@@ -238,6 +244,7 @@ class SignedURLGenerator:
             timestamp: Unix timestamp from URL.
             nonce: Unique nonce from URL.
             signature: HMAC signature from URL.
+            notifier_id: Optional unique notifier instance ID.
 
         Returns:
             SignedURLVerification with validation result.
@@ -266,7 +273,7 @@ class SignedURLGenerator:
                 return SignedURLVerification(valid=False, error="URL already used (nonce consumed)")
 
         # Verify signature
-        expected_sig = self._compute_signature(arxiv_id, platform, timestamp, nonce)
+        expected_sig = self._compute_signature(arxiv_id, platform, timestamp, nonce, notifier_id)
 
         # Constant-time comparison (prevent timing attacks)
         if not hmac.compare_digest(signature, expected_sig):
@@ -274,7 +281,7 @@ class SignedURLGenerator:
 
         return SignedURLVerification(valid=True, arxiv_id=arxiv_id, platform=platform)
 
-    def _compute_signature(self, arxiv_id: str, platform: str, timestamp: int, nonce: str) -> str:
+    def _compute_signature(self, arxiv_id: str, platform: str, timestamp: int, nonce: str, notifier_id: str | None = None) -> str:
         """Compute HMAC-SHA256 signature.
 
         Args:
@@ -282,13 +289,16 @@ class SignedURLGenerator:
             platform: Platform identifier.
             timestamp: Unix timestamp.
             nonce: Unique nonce.
+            notifier_id: Optional unique notifier instance ID.
 
         Returns:
             Hex-encoded HMAC signature.
         """
         # Canonical string includes all parameters
-        # Reason: Including nonce in signature prevents tampering
+        # Reason: Including nonce and notifier_id in signature prevents tampering
         canonical = f"{arxiv_id}|{platform}|{timestamp}|{nonce}"
+        if notifier_id:
+            canonical += f"|{notifier_id}"
 
         return hmac.new(
             key=self._secret.encode("utf-8"),

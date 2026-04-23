@@ -31,6 +31,7 @@ class TelegramNotifier:
         chat_id: str,
         rate_limit_delay: float = 0.5,
         url_generator=None,
+        notifier_id: str | None = None,
     ):
         """Initialize Telegram notifier.
 
@@ -39,11 +40,16 @@ class TelegramNotifier:
             chat_id: Target chat ID to send messages to.
             rate_limit_delay: Delay between messages to avoid rate limiting.
             url_generator: Optional SignedURLGenerator for creating analysis links.
+            notifier_id: Optional unique identifier for this notifier instance.
         """
         self._bot = Bot(token=token)
         self._chat_id = chat_id
         self._rate_limit_delay = rate_limit_delay
         self._url_generator = url_generator
+        # Generate notifier_id from chat_id if not provided
+        # Reason: Unique ID enables precise notifier matching in multi-instance setups
+        import hashlib
+        self._notifier_id = notifier_id or hashlib.sha256(f"telegram:{chat_id}".encode()).hexdigest()[:16]
 
     async def send_paper(self, paper: Paper) -> bool:
         """Send notification for a single paper.
@@ -201,7 +207,7 @@ class TelegramNotifier:
         if self._url_generator:
             try:
                 analysis_url = self._url_generator.generate_analysis_url(
-                    arxiv_id=paper.arxiv_id, platform="telegram"
+                    arxiv_id=paper.arxiv_id, platform="telegram", notifier_id=self._notifier_id
                 )
                 parts.append(
                     f"🔗 <a href='{self._escape_url(paper.abs_url)}'>Abstract</a> | "

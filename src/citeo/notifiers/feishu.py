@@ -30,6 +30,7 @@ class FeishuNotifier:
         secret: str | None = None,
         rate_limit_delay: float = 0.5,
         url_generator=None,
+        notifier_id: str | None = None,
     ):
         """Initialize Feishu notifier.
 
@@ -38,11 +39,14 @@ class FeishuNotifier:
             secret: Optional signing secret for verification.
             rate_limit_delay: Delay between messages to avoid rate limiting.
             url_generator: Optional SignedURLGenerator for creating analysis links.
+            notifier_id: Optional unique identifier for this notifier instance.
         """
         self._webhook_url = webhook_url
         self._secret = secret
         self._rate_limit_delay = rate_limit_delay
         self._url_generator = url_generator
+        # Reason: Unique ID enables precise notifier matching in multi-instance setups
+        self._notifier_id = notifier_id or hashlib.sha256(f"feishu:{webhook_url}".encode()).hexdigest()[:16]
 
     def _generate_sign(self, timestamp: int) -> str:
         """Generate signature for webhook verification.
@@ -298,7 +302,7 @@ class FeishuNotifier:
         if self._url_generator:
             try:
                 analysis_url = self._url_generator.generate_analysis_url(
-                    arxiv_id=paper.arxiv_id, platform="feishu"
+                    arxiv_id=paper.arxiv_id, platform="feishu", notifier_id=self._notifier_id
                 )
                 actions.append(
                     {
