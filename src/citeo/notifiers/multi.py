@@ -72,39 +72,71 @@ class MultiNotifier:
             paper_count=len(papers),
         )
 
-        # Send to all notifiers in parallel, passing truncation info
-        results = await asyncio.gather(
-            *[
-                n.send_papers(papers, total_filtered_count=total_filtered_count)
-                for n in self._notifiers
-            ],
-            return_exceptions=True,
-        )
+        # Group notifiers by type to handle rate limiting
+        # Reason: Multiple Telegram bots sending to same chat_id need sequential execution
+        # to avoid Telegram API rate limits, but different platforms can run in parallel
+        from citeo.notifiers.telegram import TelegramNotifier
 
-        # Log results for each notifier
-        for i, (notifier, result) in enumerate(zip(self._notifiers, results)):
-            notifier_type = type(notifier).__name__
-            if isinstance(result, Exception):
-                logger.error(
-                    "Notifier failed to send papers",
-                    notifier_index=i,
-                    notifier_type=notifier_type,
-                    error=str(result),
-                )
-            elif isinstance(result, int):
-                logger.info(
-                    "Notifier sent papers successfully",
-                    notifier_index=i,
-                    notifier_type=notifier_type,
-                    success_count=result,
-                )
-            else:
-                logger.warning(
-                    "Notifier returned unexpected result",
-                    notifier_index=i,
-                    notifier_type=notifier_type,
-                    result=result,
-                )
+        telegram_notifiers = [n for n in self._notifiers if isinstance(n, TelegramNotifier)]
+        other_notifiers = [n for n in self._notifiers if not isinstance(n, TelegramNotifier)]
+
+        results = []
+
+        # Send to Telegram bots sequentially to avoid rate limiting
+        if telegram_notifiers:
+            logger.info(
+                "Sending to Telegram bots sequentially",
+                telegram_count=len(telegram_notifiers),
+            )
+            for i, notifier in enumerate(telegram_notifiers):
+                try:
+                    result = await notifier.send_papers(papers, total_filtered_count=total_filtered_count)
+                    results.append(result)
+                    logger.info(
+                        "Telegram notifier sent papers successfully",
+                        notifier_index=i,
+                        success_count=result,
+                    )
+                except Exception as e:
+                    results.append(e)
+                    logger.error(
+                        "Telegram notifier failed to send papers",
+                        notifier_index=i,
+                        error=str(e),
+                    )
+
+        # Send to other platforms in parallel (they don't share rate limits)
+        if other_notifiers:
+            logger.info(
+                "Sending to other platforms in parallel",
+                other_count=len(other_notifiers),
+            )
+            other_results = await asyncio.gather(
+                *[
+                    n.send_papers(papers, total_filtered_count=total_filtered_count)
+                    for n in other_notifiers
+                ],
+                return_exceptions=True,
+            )
+            results.extend(other_results)
+
+            # Log results for other notifiers
+            for i, (notifier, result) in enumerate(zip(other_notifiers, other_results)):
+                notifier_type = type(notifier).__name__
+                if isinstance(result, Exception):
+                    logger.error(
+                        "Notifier failed to send papers",
+                        notifier_index=len(telegram_notifiers) + i,
+                        notifier_type=notifier_type,
+                        error=str(result),
+                    )
+                elif isinstance(result, int):
+                    logger.info(
+                        "Notifier sent papers successfully",
+                        notifier_index=len(telegram_notifiers) + i,
+                        notifier_type=notifier_type,
+                        success_count=result,
+                    )
 
         # Return the max success count across all notifiers
         success_counts = [r for r in results if isinstance(r, int)]
